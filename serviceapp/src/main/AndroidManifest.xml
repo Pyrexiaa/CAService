@@ -1,8 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" >
+
+<manifest xmlns:tools="http://schemas.android.com/tools"
+    xmlns:android="http://schemas.android.com/apk/res/android" >
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.BODY_SENSORS"/>
+
+    <!-- If location is needed in there future, we also need these -->
+    <!--
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    -->
+
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
 
     <permission android:name="com.example.serviceapp.PERMISSION_BIND_SMARTSERVICE"
         android:protectionLevel="signature" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
 
     <application
         android:allowBackup="true"
@@ -25,8 +46,10 @@
         <!--Declare bound service here-->
         <service
             android:name=".service.SmartService"
+            android:enabled="true"
             android:exported="true"
-            android:permission="com.example.serviceapp.PERMISSION_BIND_SMARTSERVICE" />
+            android:permission="com.example.serviceapp.PERMISSION_BIND_SMARTSERVICE"
+            android:foregroundServiceType="microphone|camera"/>
 
     </application>
 

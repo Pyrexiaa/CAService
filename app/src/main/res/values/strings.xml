@@ -3,4 +3,7 @@
     <string name="title_home">Home</string>
     <string name="title_dashboard">Dashboard</string>
     <string name="title_notifications">Notifications</string>
+    <string name="sensor_score">Sensor Score</string>
+    <string name="sensor_status">Sensor Status</string>
+    <string name="check_sensor_status">Check Sensor Status</string>
 </resources>

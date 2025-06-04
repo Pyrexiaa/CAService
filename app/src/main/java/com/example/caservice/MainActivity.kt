@@ -1,5 +1,6 @@
 package com.example.caservice
 
+import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -23,20 +24,20 @@ class ControllerActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
 
-    private fun showToast(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-    }
 
     companion object {
-        const val MSG_GET_GAIT = 1
-        const val MSG_GAIT_RESPONSE = 2
+        const val MSG_GET_SENSOR = 1
+        const val MSG_SENSOR_RESPONSE = 2
     }
 
     private var serviceMessenger: Messenger? = null
+    @SuppressLint("SetTextI18n")
     private val clientMessenger = Messenger(Handler(Looper.getMainLooper()) {
-        if (it.what == MSG_GAIT_RESPONSE) {
-            val status = it.data.getString("gait_status")
-            showToast("Gait: $status")
+        if (it.what == MSG_SENSOR_RESPONSE) {
+            val status = it.data.getString("sensor_status")
+            val sensorScore = it.data.getInt("sensor_score")
+            binding.sensorStatus.text = "Status: ${status ?: "Unknown"}"
+            binding.sensorScore.text = "Score: $sensorScore"
             true
         } else false
     })
@@ -57,7 +58,7 @@ class ControllerActivity : AppCompatActivity() {
     }
 
     private fun requestGaitStatus() {
-        val msg = Message.obtain(null, MSG_GET_GAIT)
+        val msg = Message.obtain(null, MSG_GET_SENSOR)
         msg.replyTo = clientMessenger
         serviceMessenger?.send(msg)
     }
