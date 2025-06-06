@@ -5,18 +5,7 @@ import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
-import android.hardware.camera2.CameraDevice
-import android.hardware.camera2.CameraManager
-import android.media.AudioFormat
-import android.media.AudioRecord
-import android.media.MediaRecorder
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -26,40 +15,45 @@ import android.os.Messenger
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
+import java.io.BufferedWriter
+import java.io.File
+import java.io.FileWriter
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class SmartService : Service() {
-
-    private lateinit var sensorManager: SensorManager
-    private lateinit var cameraManager: CameraManager
-    private lateinit var recorder: AudioRecord
 
     private var isCameraOpened = false
     private var isMicRecording = false
     private var sensorScore = 0
-    private val activeSensors = mutableSetOf<String>()
 
+    private lateinit var sensorHandler: SensorHandler
+    private lateinit var cameraHandler: CameraHandler
+    private lateinit var audioHandler: AudioHandler
+
+    @RequiresPermission(Manifest.permission.CAMERA)
     override fun onCreate() {
         super.onCreate()
+        sensorHandler = SensorHandler(this) { sensorType ->
+            sensorScore++
+            Log.d("SmartService", "Sensor activated: $sensorType | Score: $sensorScore")
+        }
+        cameraHandler = CameraHandler(this)
+        cameraHandler.startBackgroundThread()
+        cameraHandler.initializeCamera()
+        audioHandler = AudioHandler(this)
+        if (!audioHandler.ensureMicPermissionGranted()) {
+            stopSelf()
+            return
+        }
         startForegroundServiceWithNotification()
-        initializeSensors()
-        checkAndStartMic()
-        checkAndOpenCamera()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        sensorManager.unregisterListener(sensorListener)
-
-        if (isMicRecording) {
-            recorder.stop()
-            recorder.release()
-        }
-
-        if (isCameraOpened) {
-            // Ideally handle camera close here via a saved reference
-            Log.d("SmartService", "Camera was open, should be closed here")
-        }
     }
 
     override fun onBind(intent: Intent?): IBinder {
@@ -84,138 +78,76 @@ class SmartService : Service() {
 
         startForeground(1, notification)
     }
-    // endregion
-
-    // region Sensor Handling
-    private fun initializeSensors() {
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        val sensors = listOf(
-            Sensor.TYPE_ACCELEROMETER,
-            Sensor.TYPE_GYROSCOPE,
-            Sensor.TYPE_MAGNETIC_FIELD
-        )
-
-        sensors.forEach { type ->
-            sensorManager.getDefaultSensor(type)?.let {
-                sensorManager.registerListener(sensorListener, it, SensorManager.SENSOR_DELAY_NORMAL)
-            }
-        }
-    }
-
-    private val sensorListener = object : SensorEventListener {
-        override fun onSensorChanged(event: SensorEvent) {
-            handleSensorChange(event)
-        }
-
-        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-    }
-
-    private fun handleSensorChange(event: SensorEvent) {
-        val type = when (event.sensor.type) {
-            Sensor.TYPE_ACCELEROMETER -> "ACC"
-            Sensor.TYPE_GYROSCOPE -> "GYRO"
-            Sensor.TYPE_MAGNETIC_FIELD -> "MAG"
-            else -> null
-        }
-
-        type?.let {
-            if (activeSensors.add(it)) {
-                sensorScore++
-                Log.d("SensorScore", "Sensor activated: $it, Score: $sensorScore")
-            }
-        }
-    }
-    // endregion
-
-    // region Camera Handling
-    private fun checkAndOpenCamera() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            openCamera()
-        } else {
-            Log.w("SmartService", "Camera permission not granted")
-        }
-    }
-
-    @RequiresPermission(Manifest.permission.CAMERA)
-    private fun openCamera() {
-        cameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
-        val cameraId = cameraManager.cameraIdList.firstOrNull() ?: return
-        cameraManager.openCamera(cameraId, cameraStateCallback, null)
-    }
-
-    private val cameraStateCallback = object : CameraDevice.StateCallback() {
-        override fun onOpened(camera: CameraDevice) {
-            isCameraOpened = true
-            sensorScore++
-            Log.d("SmartService", "Camera opened")
-        }
-
-        override fun onDisconnected(camera: CameraDevice) {
-            camera.close()
-            isCameraOpened = false
-        }
-
-        override fun onError(camera: CameraDevice, error: Int) {
-            camera.close()
-            isCameraOpened = false
-            Log.e("SmartService", "Camera error: $error")
-        }
-    }
-    // endregion
-
-    // region Microphone Handling
-    private fun checkAndStartMic() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            startMicRecording()
-        } else {
-            Log.w("SmartService", "Microphone permission not granted")
-        }
-    }
 
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    private fun startMicRecording() {
-        val bufferSize = AudioRecord.getMinBufferSize(
-            44100,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT
-        )
+    private fun startRecordingSession() {
 
-        recorder = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            44100,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-            bufferSize
-        )
+        val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.getDefault()).format(Date())
+        val audioFile = File(filesDir, "audio_${timestamp}.pcm")
+        val sensorDataFile = File(filesDir, "sensor_${timestamp}.txt")
 
-        recorder.startRecording()
-        isMicRecording = true
-        sensorScore++
-        Log.d("SmartService", "Mic recording started")
+        CoroutineScope(Dispatchers.IO).launch {
+            val writer = BufferedWriter(FileWriter(sensorDataFile))
+
+            // Launch all three tasks concurrently
+            val sensorJob = launch { sensorHandler.logSensorData(writer) }
+            val audioJob = launch { if (!isMicRecording) audioHandler.startMicRecording(audioFile) }
+
+            // Since the capture image is a suspend function, this will be the total runtime for sensor and audio job
+            val imageJob = launch {
+                val startTime = System.currentTimeMillis()
+                while (System.currentTimeMillis() - startTime < 60_000L) {
+                    try {
+                        cameraHandler.captureImage()
+                    } catch (e: Exception) {
+                        Log.e("CameraHandler", "Capture failed: ${e.message}")
+                    }
+                    delay(1000L)
+                }
+            }
+
+            joinAll(sensorJob, audioJob, imageJob) // Wait for all tasks to complete
+
+            writer.flush()
+            writer.close()
+
+            withContext(Dispatchers.Main) {
+                audioHandler.stopMicRecording()
+                sendConnectionStatus("Recording session completed.\nAudio: ${audioFile.name}\nSensor: ${sensorDataFile.name}")
+            }
+        }
     }
-    // endregion
 
     // region IPC via Messenger
     companion object {
         const val MSG_GET_SENSOR = 1
         const val MSG_SENSOR_RESPONSE = 2
+        const val MSG_START_RECORDING = 3
     }
 
     private val messenger = Messenger(IncomingHandler())
 
     @SuppressLint("HandlerLeak")
     inner class IncomingHandler : Handler(Looper.getMainLooper()) {
+        @RequiresPermission(Manifest.permission.RECORD_AUDIO)
         override fun handleMessage(msg: Message) {
-            if (msg.what == MSG_GET_SENSOR) {
-                val reply = msg.replyTo
-                val response = Message.obtain(null, MSG_SENSOR_RESPONSE)
-                val data = Bundle().apply {
-                    putString("sensor_status", "Opened")
-                    putInt("sensor_score", sensorScore)
+            when (msg.what) {
+                MSG_GET_SENSOR -> {
+                    val reply = msg.replyTo
+                    val response = Message.obtain(null, MSG_SENSOR_RESPONSE)
+                    val data = Bundle().apply {
+                        putString("sensor_status", "Opened")
+                        putInt("sensor_score", sensorScore)
+                    }
+                    response.data = data
+                    reply.send(response)
+                    sendConnectionStatus("Replied with score: $sensorScore")
                 }
-                response.data = data
-                reply.send(response)
-                sendConnectionStatus("Replied with score: $sensorScore")
+
+                MSG_START_RECORDING -> {
+                    startRecordingSession()
+                    sendConnectionStatus("Started 1-minute recording session")
+                }
             }
         }
     }
@@ -226,5 +158,16 @@ class SmartService : Service() {
         }
         sendBroadcast(intent)
     }
-    // endregion
+
+    override fun onDestroy() {
+        super.onDestroy()
+        sensorHandler.stopListening()
+        audioHandler.stopMicRecording()
+        cameraHandler.stopBackgroundThread()
+
+        if (isCameraOpened) {
+            cameraHandler.releaseCamera()
+            Log.d("SmartService", "Camera closed")
+        }
+    }
 }

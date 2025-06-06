@@ -11,7 +11,8 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Message
 import android.os.Messenger
-import android.widget.Toast
+import android.os.RemoteException
+import android.util.Log
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.navigation.findNavController
@@ -28,6 +29,7 @@ class ControllerActivity : AppCompatActivity() {
     companion object {
         const val MSG_GET_SENSOR = 1
         const val MSG_SENSOR_RESPONSE = 2
+        const val MSG_START_RECORDING = 3
     }
 
     private var serviceMessenger: Messenger? = null
@@ -51,13 +53,27 @@ class ControllerActivity : AppCompatActivity() {
         }
     }
 
+    private fun sendStartRecordingCommand() {
+        Log.d("ControllerActivity", "Sent start recording message to service.")
+        serviceMessenger?.let {
+            val msg = Message.obtain(null, MSG_START_RECORDING)
+            msg.replyTo = clientMessenger
+            try {
+                it.send(msg)
+                Log.d("ControllerActivity", "Recorded into internal storage files")
+            } catch (e: RemoteException) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     private fun bindService() {
         val intent = Intent()
         intent.setClassName("com.example.serviceapp", "com.example.serviceapp.service.SmartService")
         bindService(intent, conn, Context.BIND_AUTO_CREATE)
     }
 
-    private fun requestGaitStatus() {
+    private fun requestSensorStatus() {
         val msg = Message.obtain(null, MSG_GET_SENSOR)
         msg.replyTo = clientMessenger
         serviceMessenger?.send(msg)
@@ -86,7 +102,8 @@ class ControllerActivity : AppCompatActivity() {
 
         // Button to request gait status
         binding.btnRequestGait.setOnClickListener {
-            requestGaitStatus()
+            sendStartRecordingCommand()
+            requestSensorStatus()
         }
     }
 }
