@@ -19,7 +19,7 @@ class AudioHandler(private val context: Context) {
     private var isMicRecording = false
 
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    suspend fun startMicRecording(filePath: File) = withContext(Dispatchers.IO) {
+    suspend fun startMicRecording(filePath: File, durationMillis: Long = 1000L) = withContext(Dispatchers.IO) {
         val sampleRate = 44100
         val channelConfig = AudioFormat.CHANNEL_IN_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
@@ -37,13 +37,22 @@ class AudioHandler(private val context: Context) {
         isMicRecording = true
 
         val audioData = ByteArray(bufferSize)
+        val startTime = System.currentTimeMillis()
+
         FileOutputStream(filePath).use { outputStream ->
-            while (isMicRecording && recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+            while (System.currentTimeMillis() - startTime < durationMillis &&
+                recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                 val read = recorder?.read(audioData, 0, bufferSize) ?: 0
                 if (read > 0) outputStream.write(audioData, 0, read)
             }
         }
+
+        recorder?.stop()
+        recorder?.release()
+        recorder = null
+        isMicRecording = false
     }
+
 
     fun stopMicRecording() {
         if (isMicRecording) {

@@ -20,8 +20,6 @@ import java.io.File
 import java.io.FileWriter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -33,6 +31,7 @@ import java.util.Locale
 
 class SmartService : Service() {
 
+    private var isActive = true
     private var sensorScore = 0
     private lateinit var sensorHandler: SensorHandler
     private lateinit var cameraHandler: CameraHandler
@@ -99,56 +98,94 @@ class SmartService : Service() {
     // To prevent coroutine scope leak risk
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     private fun startRecordingSession() {
-
-        val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.getDefault()).format(Date())
-        val audioFile = File(filesDir, "audio_${timestamp}.pcm")
-        val sensorDataFile = File(filesDir, "sensor_${timestamp}.txt")
-
         CoroutineScope(Dispatchers.IO).launch {
-            val writer = try {
-                BufferedWriter(FileWriter(sensorDataFile))
-            } catch (e: IOException) {
-                Log.e("SmartService", "Failed to create sensor data file: ${e.message}")
-                sendConnectionStatus("Sensor log file creation failed.")
-                return@launch
-            }
 
-            val sensorJob = launch { sensorHandler.logSensorData(writer) }
+            val audioDir = File(filesDir, "audio").apply { mkdirs() }
+            val sensorDir = File(filesDir, "sensor").apply { mkdirs() }
+            val imageDir = File(filesDir, "image").apply { mkdirs() }
 
-            // Handle unexpected exception if the mic recording failed.
-            val audioJob = launch {
-                try {
-                    audioHandler.startMicRecording(audioFile)
-                } catch (e: Exception) {
-                    Log.e("SmartService", "Mic recording failed: ${e.message}")
-                    sendConnectionStatus("Mic recording failed: ${e.message}")
+            val maxFiles = 60
+
+            // Reusable function to manage file renaming and rotation
+            fun shiftAndSaveFile(fileDir: File, prefix: String, extension: String, tempFile: File) {
+                // Delete oldest file
+                val oldestFile = File(fileDir, "${prefix}_1$extension")
+                if (oldestFile.exists()) {
+                    oldestFile.delete()
                 }
+
+                // Shift existing files
+                for (i in 2..maxFiles) {
+                    val oldFile = File(fileDir, "${prefix}_$i$extension")
+                    if (oldFile.exists()) {
+                        val newFile = File(fileDir, "${prefix}_${i - 1}$extension")
+                        oldFile.renameTo(newFile)
+                    }
+                }
+
+                // Save new file as the latest one
+                val finalFile = File(fileDir, "${prefix}_$maxFiles$extension")
+                tempFile.copyTo(finalFile, overwrite = true)
+                tempFile.delete()
             }
 
-            // Since the capture image is a suspend function, this will be the total runtime for sensor and audio job
-            val imageJob = launch {
-                val startTime = System.currentTimeMillis()
-                while (System.currentTimeMillis() - startTime < 60_000L) {
+            while (isActive) {
+                val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.getDefault()).format(Date())
+                val tempAudioFile = File(audioDir, "temp_audio_$timestamp.pcm")
+                val tempSensorFile = File(sensorDir, "temp_sensor_$timestamp.txt")
+                val tempImageFile = File(imageDir, "temp_image_$timestamp.jpg")
+
+                val writer = try {
+                    BufferedWriter(FileWriter(tempSensorFile))
+                } catch (e: IOException) {
+                    Log.e("SmartService", "Sensor file creation failed: ${e.message}")
+                    delay(1000L)
+                    continue
+                }
+
+                val sensorJob = launch {
                     try {
-                        cameraHandler.captureImage()
+                        sensorHandler.logSensorData(writer, durationMillis = 1000L)
+                    } catch (e: Exception) {
+                        Log.e("SensorHandler", "Sensor logging failed: ${e.message}")
+                    }
+                }
+
+                val audioJob = launch {
+                    try {
+                        audioHandler.startMicRecording(tempAudioFile, durationMillis = 1000L)
+                    } catch (e: Exception) {
+                        Log.e("AudioHandler", "Mic recording failed: ${e.message}")
+                    }
+                }
+
+                val imageJob = launch {
+                    try {
+                        cameraHandler.captureImage(outputFile = tempImageFile)
                     } catch (e: Exception) {
                         Log.e("CameraHandler", "Capture failed: ${e.message}")
                     }
-                    delay(1000L)
                 }
+
+                joinAll(sensorJob, audioJob, imageJob)
+
+                writer.flush()
+                writer.close()
+
+                // Rotate and rename files to maintain max 60
+                shiftAndSaveFile(audioDir, "audio", ".pcm", tempAudioFile)
+                shiftAndSaveFile(sensorDir, "sensor", ".txt", tempSensorFile)
+                shiftAndSaveFile(imageDir, "image", ".jpg", tempImageFile)
             }
 
-            joinAll(sensorJob, audioJob, imageJob) // Wait for all tasks to complete
-
-            writer.flush()
-            writer.close()
-
             withContext(Dispatchers.Main) {
-                audioHandler.stopMicRecording()
-                sendConnectionStatus("Recording session completed.\nAudio: ${audioFile.name}\nSensor: ${sensorDataFile.name}")
+                sendConnectionStatus("Rolling session stopped. Last 60 segments stored.")
             }
         }
     }
+
+
+
 
     // region IPC via Messenger
     companion object {

@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.BufferedWriter
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -66,14 +67,20 @@ class SensorHandler (
         sensorManager.unregisterListener(sensorListener)
     }
 
-    suspend fun logSensorData(writer: BufferedWriter) = withContext(Dispatchers.IO) {
+    suspend fun logSensorData(writer: BufferedWriter, durationMillis: Long = 1000L) = withContext(Dispatchers.IO) {
+        var isLogging = true
+
         val logger = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
-                val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.getDefault()).format(
-                    Date()
-                )
+                if (!isLogging) return  // Prevent writing after logging stops
+
+                val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.getDefault()).format(Date())
                 val data = "${timestamp},${event.sensor.name},${event.values.joinToString(",")}"
-                writer.write("$data\n")
+                try {
+                    writer.write("$data\n")
+                } catch (e: IOException) {
+                    Log.e("SensorLogger", "Failed to write sensor data: ${e.message}")
+                }
             }
 
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
@@ -82,9 +89,12 @@ class SensorHandler (
         startListening(listener = logger)
 
         try {
-            delay(Long.MAX_VALUE) // Keep it active until cancel
-        } catch (e: CancellationException) {
+            delay(durationMillis)
+        } finally {
+            isLogging = false  // Stop writing any further sensor data
             stopListening()
         }
     }
+
+
 }

@@ -14,10 +14,10 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
 import android.util.Size
-import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -45,6 +45,8 @@ class CameraHandler(private val context: Context) {
         backgroundHandler = null
     }
 
+
+
     fun initializeCamera() {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             Log.e("CameraHandler", "Camera permission not granted")
@@ -52,7 +54,18 @@ class CameraHandler(private val context: Context) {
         }
 
         val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        val cameraId = manager.cameraIdList.first() // Use the first available camera
+
+        // Try front camera first, then fallback to back camera
+        val cameraId = manager.cameraIdList.firstOrNull { id ->
+            val characteristics = manager.getCameraCharacteristics(id)
+            characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+        } ?: manager.cameraIdList.firstOrNull { id ->
+            val characteristics = manager.getCameraCharacteristics(id)
+            characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
+        } ?: run {
+            Log.e("CameraHandler", "No available camera found")
+            return
+        }
 
         val characteristics = manager.getCameraCharacteristics(cameraId)
         val configMap = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
@@ -64,8 +77,16 @@ class CameraHandler(private val context: Context) {
             val buffer: ByteBuffer = image.planes[0].buffer
             val bytes = ByteArray(buffer.remaining())
             buffer.get(bytes)
-            val photoTimestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.getDefault()).format(Date())
-            val imageFile = File(context.filesDir, "photo_${photoTimestamp}.jpg")
+            val imageFile = nextImageOutputFile
+            if (imageFile != null) {
+                try {
+                    FileOutputStream(imageFile).use { it.write(bytes) }
+                } catch (e: IOException) {
+                    Log.e("CameraHandler", "Failed to save image: ${e.message}")
+                }
+            } else {
+                Log.e("CameraHandler", "No output file specified for image")
+            }
             FileOutputStream(imageFile).use { it.write(bytes) }
             image.close()
         }, backgroundHandler)
@@ -75,9 +96,6 @@ class CameraHandler(private val context: Context) {
                 override fun onOpened(device: CameraDevice) {
                     cameraDevice = device
                     val surface = imageReader.surface
-                    val captureRequestBuilder = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
-                        addTarget(surface)
-                    }
 
                     device.createCaptureSession(listOf(surface), object : CameraCaptureSession.StateCallback() {
                         override fun onConfigured(session: CameraCaptureSession) {
@@ -111,12 +129,16 @@ class CameraHandler(private val context: Context) {
 
     }
 
-    fun captureImage() {
+    private var nextImageOutputFile: File? = null
+
+    fun captureImage(outputFile: File) {
         try {
             if (cameraDevice == null || cameraSession == null) {
                 Log.w("CameraHandler", "Camera not ready for capture")
                 return
             }
+
+            nextImageOutputFile = outputFile // Save the file path for later use in callback
 
             val request = cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
                 addTarget(imageReader.surface)
@@ -129,6 +151,7 @@ class CameraHandler(private val context: Context) {
             Log.e("CameraHandler", "Unexpected exception during capture: ${e.message}")
         }
     }
+
 
     fun releaseCamera() {
         cameraSession?.close()
