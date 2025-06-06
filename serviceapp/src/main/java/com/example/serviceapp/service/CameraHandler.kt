@@ -2,7 +2,9 @@ package com.example.serviceapp.service
 
 import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.ImageFormat
+import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
@@ -13,6 +15,7 @@ import android.os.HandlerThread
 import android.util.Log
 import android.util.Size
 import androidx.annotation.RequiresPermission
+import androidx.core.content.ContextCompat
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
@@ -42,8 +45,12 @@ class CameraHandler(private val context: Context) {
         backgroundHandler = null
     }
 
-    @RequiresPermission(Manifest.permission.CAMERA)
     fun initializeCamera() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            Log.e("CameraHandler", "Camera permission not granted")
+            return
+        }
+
         val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
         val cameraId = manager.cameraIdList.first() // Use the first available camera
 
@@ -63,43 +70,64 @@ class CameraHandler(private val context: Context) {
             image.close()
         }, backgroundHandler)
 
-        manager.openCamera(cameraId, object : CameraDevice.StateCallback() {
-            override fun onOpened(device: CameraDevice) {
-                cameraDevice = device
-                val surface = imageReader.surface
-                val captureRequestBuilder = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
-                    addTarget(surface)
+        try {
+            manager.openCamera(cameraId, object : CameraDevice.StateCallback() {
+                override fun onOpened(device: CameraDevice) {
+                    cameraDevice = device
+                    val surface = imageReader.surface
+                    val captureRequestBuilder = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+                        addTarget(surface)
+                    }
+
+                    device.createCaptureSession(listOf(surface), object : CameraCaptureSession.StateCallback() {
+                        override fun onConfigured(session: CameraCaptureSession) {
+                            cameraSession = session
+                        }
+
+                        override fun onConfigureFailed(session: CameraCaptureSession) {
+                            Log.e("CameraHandler", "Camera session configuration failed")
+                        }
+                    }, backgroundHandler)
                 }
 
-                device.createCaptureSession(listOf(surface), object : CameraCaptureSession.StateCallback() {
-                    override fun onConfigured(session: CameraCaptureSession) {
-                        cameraSession = session
-                    }
+                override fun onDisconnected(device: CameraDevice) {
+                    device.close()
+                    cameraDevice = null
+                    cameraSession?.close()
+                    cameraSession = null
+                }
 
-                    override fun onConfigureFailed(session: CameraCaptureSession) {
-                        Log.e("CameraHandler", "Camera session configuration failed")
-                    }
-                }, backgroundHandler)
-            }
+                override fun onError(device: CameraDevice, error: Int) {
+                    Log.e("CameraHandler", "Camera error: $error")
+                    device.close()
+                    cameraDevice = null
+                    cameraSession?.close()
+                    cameraSession = null
+                }
+            }, backgroundHandler)
+        } catch (e: CameraAccessException) {
+            Log.e("CameraHandler", "Failed to open camera: ${e.message}")
+        }
 
-            override fun onDisconnected(device: CameraDevice) {
-                device.close()
-            }
-
-            override fun onError(device: CameraDevice, error: Int) {
-                device.close()
-            }
-        }, backgroundHandler)
     }
 
-    suspend fun captureImage() {
-        cameraSession?.capture(
-            cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+    fun captureImage() {
+        try {
+            if (cameraDevice == null || cameraSession == null) {
+                Log.w("CameraHandler", "Camera not ready for capture")
+                return
+            }
+
+            val request = cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
                 addTarget(imageReader.surface)
-            }.build(),
-            null,
-            backgroundHandler
-        )
+            }
+
+            cameraSession?.capture(request.build(), null, backgroundHandler)
+        } catch (e: CameraAccessException) {
+            Log.e("CameraHandler", "Camera access exception during capture: ${e.message}")
+        } catch (e: Exception) {
+            Log.e("CameraHandler", "Unexpected exception during capture: ${e.message}")
+        }
     }
 
     fun releaseCamera() {

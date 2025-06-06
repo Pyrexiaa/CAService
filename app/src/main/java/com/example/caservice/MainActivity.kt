@@ -25,7 +25,6 @@ class ControllerActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
 
-
     companion object {
         const val MSG_GET_SENSOR = 1
         const val MSG_SENSOR_RESPONSE = 2

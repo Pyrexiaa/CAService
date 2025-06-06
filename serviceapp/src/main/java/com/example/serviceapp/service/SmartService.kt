@@ -20,20 +20,20 @@ import java.io.File
 import java.io.FileWriter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 class SmartService : Service() {
 
-    private var isCameraOpened = false
-    private var isMicRecording = false
     private var sensorScore = 0
-
     private lateinit var sensorHandler: SensorHandler
     private lateinit var cameraHandler: CameraHandler
     private lateinit var audioHandler: AudioHandler
@@ -47,13 +47,31 @@ class SmartService : Service() {
         }
         cameraHandler = CameraHandler(this)
         cameraHandler.startBackgroundThread()
-        cameraHandler.initializeCamera()
+
+        try {
+            cameraHandler.initializeCamera()
+        } catch (e: Exception) {
+            Log.e("SmartService", "Camera initialization failed: ${e.message}")
+            sendConnectionStatus("Camera init failed. Stopping service.")
+            stopSelf()
+            return
+        }
+
         audioHandler = AudioHandler(this)
         if (!audioHandler.ensureMicPermissionGranted()) {
             stopSelf()
             return
         }
         startForegroundServiceWithNotification()
+    }
+
+    // Handle cases where user might revoke mic or camera permission while the service is running.
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!audioHandler.ensureMicPermissionGranted()) {
+            sendConnectionStatus("Mic permission revoked. Stopping service.")
+            stopSelf()
+        }
+        return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder {
@@ -73,12 +91,12 @@ class SmartService : Service() {
         val notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Smart Service Running")
             .setContentText("Monitoring sensors")
-//            .setSmallIcon(R.drawable.ic_notification) // Make sure this icon exists
             .build()
 
         startForeground(1, notification)
     }
 
+    // To prevent coroutine scope leak risk
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     private fun startRecordingSession() {
 
@@ -87,11 +105,25 @@ class SmartService : Service() {
         val sensorDataFile = File(filesDir, "sensor_${timestamp}.txt")
 
         CoroutineScope(Dispatchers.IO).launch {
-            val writer = BufferedWriter(FileWriter(sensorDataFile))
+            val writer = try {
+                BufferedWriter(FileWriter(sensorDataFile))
+            } catch (e: IOException) {
+                Log.e("SmartService", "Failed to create sensor data file: ${e.message}")
+                sendConnectionStatus("Sensor log file creation failed.")
+                return@launch
+            }
 
-            // Launch all three tasks concurrently
             val sensorJob = launch { sensorHandler.logSensorData(writer) }
-            val audioJob = launch { if (!isMicRecording) audioHandler.startMicRecording(audioFile) }
+
+            // Handle unexpected exception if the mic recording failed.
+            val audioJob = launch {
+                try {
+                    audioHandler.startMicRecording(audioFile)
+                } catch (e: Exception) {
+                    Log.e("SmartService", "Mic recording failed: ${e.message}")
+                    sendConnectionStatus("Mic recording failed: ${e.message}")
+                }
+            }
 
             // Since the capture image is a suspend function, this will be the total runtime for sensor and audio job
             val imageJob = launch {
@@ -163,11 +195,7 @@ class SmartService : Service() {
         super.onDestroy()
         sensorHandler.stopListening()
         audioHandler.stopMicRecording()
+        cameraHandler.releaseCamera()
         cameraHandler.stopBackgroundThread()
-
-        if (isCameraOpened) {
-            cameraHandler.releaseCamera()
-            Log.d("SmartService", "Camera closed")
-        }
     }
 }
