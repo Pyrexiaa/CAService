@@ -6,6 +6,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -15,6 +16,7 @@ import android.os.Messenger
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
@@ -33,6 +35,9 @@ class SmartService : Service() {
 
     private var isActive = true
     private var sensorScore = 0
+    private var sensorStatus =  true
+    private var cameraStatus = true
+    private var audioStatus = true
     private lateinit var sensorHandler: SensorHandler
     private lateinit var cameraHandler: CameraHandler
     private lateinit var audioHandler: AudioHandler
@@ -44,32 +49,39 @@ class SmartService : Service() {
             sensorScore++
             Log.d("SmartService", "Sensor activated: $sensorType | Score: $sensorScore")
         }
-        cameraHandler = CameraHandler(this)
-        cameraHandler.startBackgroundThread()
 
-        try {
-            cameraHandler.initializeCamera()
-        } catch (e: Exception) {
-            Log.e("SmartService", "Camera initialization failed: ${e.message}")
-            sendConnectionStatus("Camera init failed. Stopping service.")
-            stopSelf()
-            return
+        // Initialize camera handler only if permission is granted
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            cameraHandler = CameraHandler(this)
+            cameraHandler.startBackgroundThread()
+            try {
+                cameraHandler.initializeCamera()
+                cameraStatus = true
+            } catch (e: Exception) {
+                Log.e("SmartService", "Camera initialization failed: ${e.message}")
+                sendConnectionStatus("Camera init failed. Continuing without camera.")
+                cameraStatus = false // mark camera as unusable
+            }
+        } else {
+            sendConnectionStatus("Camera permission not granted. Continuing without camera.")
         }
 
-        audioHandler = AudioHandler(this)
-        if (!audioHandler.ensureMicPermissionGranted()) {
-            stopSelf()
-            return
+        // Initialize audio handler only if permission is granted
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            audioHandler = AudioHandler(this)
+            audioStatus = true
+        } else {
+            audioStatus = false // mark audio as unusable
+            sendConnectionStatus("Mic permission not granted. Continuing without mic.")
         }
-        startForegroundServiceWithNotification()
     }
 
     // Handle cases where user might revoke mic or camera permission while the service is running.
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!audioHandler.ensureMicPermissionGranted()) {
-            sendConnectionStatus("Mic permission revoked. Stopping service.")
-            stopSelf()
+        if (!audioStatus) {
+            sendConnectionStatus("Mic permission revoked. Continuing without camera.")
         }
+        startForegroundServiceWithNotification()
         return START_STICKY
     }
 
@@ -151,23 +163,45 @@ class SmartService : Service() {
                     }
                 }
 
-                val audioJob = launch {
-                    try {
-                        audioHandler.startMicRecording(tempAudioFile, durationMillis = 1000L)
-                    } catch (e: Exception) {
-                        Log.e("AudioHandler", "Mic recording failed: ${e.message}")
+                if (audioStatus && cameraStatus) {
+                    val audioJob = launch {
+                        try {
+                            audioHandler.startMicRecording(tempAudioFile, durationMillis = 1000L)
+                        } catch (e: Exception) {
+                            Log.e("AudioHandler", "Mic recording failed: ${e.message}")
+                        }
                     }
-                }
 
-                val imageJob = launch {
-                    try {
-                        cameraHandler.captureImage(outputFile = tempImageFile)
-                    } catch (e: Exception) {
-                        Log.e("CameraHandler", "Capture failed: ${e.message}")
+                    val imageJob = launch {
+                        try {
+                            cameraHandler.captureImage(outputFile = tempImageFile)
+                        } catch (e: Exception) {
+                            Log.e("CameraHandler", "Capture failed: ${e.message}")
+                        }
                     }
-                }
 
-                joinAll(sensorJob, audioJob, imageJob)
+                    joinAll(sensorJob, audioJob, imageJob)
+                } else if (audioStatus) {
+                    val audioJob = launch {
+                        try {
+                            audioHandler.startMicRecording(tempAudioFile, durationMillis = 1000L)
+                        } catch (e: Exception) {
+                            Log.e("AudioHandler", "Mic recording failed: ${e.message}")
+                        }
+                    }
+                    joinAll(sensorJob, audioJob)
+                } else if (cameraStatus) {
+                    val imageJob = launch {
+                        try {
+                            cameraHandler.captureImage(outputFile = tempImageFile)
+                        } catch (e: Exception) {
+                            Log.e("CameraHandler", "Capture failed: ${e.message}")
+                        }
+                    }
+                    joinAll(sensorJob, imageJob)
+                } else {
+                    sensorJob.join()
+                }
 
                 writer.flush()
                 writer.close()
@@ -183,8 +217,6 @@ class SmartService : Service() {
             }
         }
     }
-
-
 
 
     // region IPC via Messenger
@@ -231,8 +263,14 @@ class SmartService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         sensorHandler.stopListening()
-        audioHandler.stopMicRecording()
-        cameraHandler.releaseCamera()
-        cameraHandler.stopBackgroundThread()
+        if (audioStatus) {
+            audioHandler.stopMicRecording()
+            audioStatus = false
+        }
+        if (cameraStatus) {
+            cameraHandler.releaseCamera()
+            cameraHandler.stopBackgroundThread()
+            cameraStatus = false
+        }
     }
 }

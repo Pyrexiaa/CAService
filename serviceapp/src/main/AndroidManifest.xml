@@ -10,12 +10,6 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.BODY_SENSORS"/>
 
-    <!-- If location is needed in there future, we also need these -->
-    <!--
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    -->
 
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
 
@@ -49,7 +43,7 @@
             android:enabled="true"
             android:exported="true"
             android:permission="com.example.serviceapp.PERMISSION_BIND_SMARTSERVICE"
-            android:foregroundServiceType="microphone|camera"/>
+            android:foregroundServiceType="camera|microphone" />
 
     </application>
 

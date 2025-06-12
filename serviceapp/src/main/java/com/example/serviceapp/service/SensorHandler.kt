@@ -14,7 +14,6 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.coroutines.cancellation.CancellationException
 
 class SensorHandler (
     private val context: Context,
@@ -68,16 +67,13 @@ class SensorHandler (
     }
 
     suspend fun logSensorData(writer: BufferedWriter, durationMillis: Long = 1000L) = withContext(Dispatchers.IO) {
-        var isLogging = true
-
         val logger = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
-                if (!isLogging) return  // Prevent writing after logging stops
-
                 val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.getDefault()).format(Date())
                 val data = "${timestamp},${event.sensor.name},${event.values.joinToString(",")}"
                 try {
                     writer.write("$data\n")
+                    writer.flush() // Flush after writing to ensure data is not lost
                 } catch (e: IOException) {
                     Log.e("SensorLogger", "Failed to write sensor data: ${e.message}")
                 }
@@ -86,15 +82,24 @@ class SensorHandler (
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
 
-        startListening(listener = logger)
-
         try {
+            // Register temporary logger
+            listOf(
+                Sensor.TYPE_ACCELEROMETER,
+                Sensor.TYPE_GYROSCOPE,
+                Sensor.TYPE_MAGNETIC_FIELD
+            ).forEach { type ->
+                sensorManager.getDefaultSensor(type)?.let {
+                    sensorManager.registerListener(logger, it, SensorManager.SENSOR_DELAY_NORMAL)
+                }
+            }
+
             delay(durationMillis)
+
         } finally {
-            isLogging = false  // Stop writing any further sensor data
-            stopListening()
+            // Always unregister after logging to avoid listener overflow
+            sensorManager.unregisterListener(logger)
         }
     }
-
 
 }

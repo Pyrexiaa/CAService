@@ -48,7 +48,6 @@ class ServiceActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityMainBinding
-
     private lateinit var permissionLauncher: ActivityResultLauncher<Array<String>>
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,12 +59,8 @@ class ServiceActivity : AppCompatActivity() {
         val navView: BottomNavigationView = binding.navView
 
         val navController = findNavController(R.id.nav_host_fragment_activity_main)
-        // Passing each menu ID as a set of Ids because each
-        // menu should be considered as top level destinations.
         val appBarConfiguration = AppBarConfiguration(
-            setOf(
-                R.id.navigation_home, R.id.navigation_dashboard, R.id.navigation_notifications
-            )
+            setOf(R.id.navigation_home, R.id.navigation_dashboard, R.id.navigation_notifications)
         )
         setupActionBarWithNavController(navController, appBarConfiguration)
         navView.setupWithNavController(navController)
@@ -73,16 +68,16 @@ class ServiceActivity : AppCompatActivity() {
         permissionLauncher = registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
         ) { permissions ->
-            val allGranted = permissions.entries.all { it.value }
-            if (allGranted) {
-                startSmartService()
-            } else {
-                Toast.makeText(this, "Permissions are required to start the service", Toast.LENGTH_LONG).show()
+            val deniedPermissions = permissions.filter { !it.value }.keys
+            if (deniedPermissions.isNotEmpty()) {
+                Toast.makeText(this,
+                    "Some permissions denied: ${deniedPermissions.joinToString()}. Limited functionality.",
+                    Toast.LENGTH_LONG).show()
             }
+            // Start service anyway
+            startSmartService()
         }
-
         requestPermissionsIfNeeded()
-
     }
 
     private fun startSmartService() {
@@ -105,5 +100,7 @@ class ServiceActivity : AppCompatActivity() {
         } else {
             startSmartService()
         }
+
     }
+
 }
