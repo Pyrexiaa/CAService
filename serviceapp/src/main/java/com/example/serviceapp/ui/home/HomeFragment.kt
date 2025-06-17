@@ -20,10 +20,7 @@ import com.example.serviceapp.databinding.FragmentHomeBinding
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
-import kotlin.math.sqrt
-import androidx.core.graphics.scale
-import androidx.core.graphics.get
-import androidx.core.content.edit
+import com.example.serviceapp.models.face.FaceRecognizer
 
 class HomeFragment : Fragment() {
 
@@ -41,7 +38,7 @@ class HomeFragment : Fragment() {
     savedInstanceState: Bundle?
     ): View {
         val homeViewModel =
-            ViewModelProvider(this).get(HomeViewModel::class.java)
+            ViewModelProvider(this)[HomeViewModel::class.java]
 
         _binding = FragmentHomeBinding.inflate(inflater, container, false)
         val root: View = binding.root
@@ -69,14 +66,14 @@ class HomeFragment : Fragment() {
         return root
     }
 
-    private var enrolledFaceEmbedding: FloatArray? = null
     private lateinit var bitmap: Bitmap
+    private lateinit var faceRecognizer: FaceRecognizer
 
     @RequiresApi(Build.VERSION_CODES.P)
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        enrolledFaceEmbedding = loadEmbeddingFromPrefs(requireContext())
+        faceRecognizer = FaceRecognizer(requireContext(), "custom_face_last_linear_layer_float16.tflite")
 
         binding.btnFaceEnroll.setOnClickListener {
             captureImageLauncher.launch(null)
@@ -126,6 +123,7 @@ class HomeFragment : Fragment() {
         .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
         .build()
 
+    // Use face recognition model, not face detection
     private val faceDetector = FaceDetection.getClient(detectorOptions)
 
     private fun processFace(imageBitmap: Bitmap) {
@@ -136,8 +134,9 @@ class HomeFragment : Fragment() {
                 if (faces.isNotEmpty()) {
                     val face = faces[0]
                     val faceBitmap = cropFace(imageBitmap, face.boundingBox)
-                    enrolledFaceEmbedding = extractEmbedding(faceBitmap)
-                    saveEmbeddingToPrefs(requireContext(), enrolledFaceEmbedding!!)
+                    // Extract and enroll the face embedding using FaceRecognizer
+                    faceRecognizer.enrollEmbedding(faceBitmap)
+
                     Toast.makeText(requireContext(), "Face enrolled", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(requireContext(), "No face detected", Toast.LENGTH_SHORT).show()
@@ -149,11 +148,8 @@ class HomeFragment : Fragment() {
     }
 
 
+
     private fun verifyFace(bitmap: Bitmap, onResult: (confidence: Float, isMatch: Boolean) -> Unit) {
-        if (enrolledFaceEmbedding == null) {
-            onResult(0f, false)
-            return
-        }
 
         val inputImage = InputImage.fromBitmap(bitmap, 0)
 
@@ -162,11 +158,8 @@ class HomeFragment : Fragment() {
                 if (faces.isNotEmpty()) {
                     val face = faces[0]
                     val faceBitmap = cropFace(bitmap, face.boundingBox)
-                    val currentEmbedding = extractEmbedding(faceBitmap)
-
-                    val similarity = cosineSimilarity(enrolledFaceEmbedding!!, currentEmbedding)
-                    val isMatch = similarity > 0.85f  // You can adjust the threshold
-
+                    val similarity = faceRecognizer.verifyFace(faceBitmap)
+                    val isMatch = similarity > 0.50f  // You can adjust the threshold
                     onResult(similarity, isMatch)
                 } else {
                     onResult(0f, false)
@@ -185,52 +178,6 @@ class HomeFragment : Fragment() {
             box.bottom.coerceAtMost(original.height)
         )
         return Bitmap.createBitmap(original, safeBox.left, safeBox.top, safeBox.width(), safeBox.height())
-    }
-
-    // Simplified: Resize and flatten grayscale
-    private fun extractEmbedding(faceBitmap: Bitmap): FloatArray {
-        val resized = faceBitmap.scale(50, 50)
-        val grayscale = FloatArray(50 * 50)
-
-        for (y in 0 until 50) {
-            for (x in 0 until 50) {
-                val pixel = resized[x, y]
-                val r = Color.red(pixel)
-                val g = Color.green(pixel)
-                val b = Color.blue(pixel)
-                val gray = (r + g + b) / 3f / 255f  // Normalize
-                grayscale[y * 50 + x] = gray
-            }
-        }
-        return grayscale
-    }
-
-    private fun cosineSimilarity(vec1: FloatArray, vec2: FloatArray): Float {
-        require(vec1.size == vec2.size) { "Vectors must be of the same length" }
-
-        var dot = 0.0
-        var norm1 = 0.0
-        var norm2 = 0.0
-
-        for (i in vec1.indices) {
-            dot += vec1[i] * vec2[i]
-            norm1 += vec1[i] * vec1[i]
-            norm2 += vec2[i] * vec2[i]
-        }
-
-        return (dot / (sqrt(norm1) * sqrt(norm2))).toFloat()
-    }
-
-    private fun saveEmbeddingToPrefs(context: Context, embedding: FloatArray) {
-        val sharedPref = context.getSharedPreferences("face_prefs", Context.MODE_PRIVATE)
-        val str = embedding.joinToString(",")
-        sharedPref.edit { putString("embedding", str) }
-    }
-
-    private fun loadEmbeddingFromPrefs(context: Context): FloatArray? {
-        val sharedPref = context.getSharedPreferences("face_prefs", Context.MODE_PRIVATE)
-        val str = sharedPref.getString("embedding", null) ?: return null
-        return str.split(",").map { it.toFloat() }.toFloatArray()
     }
 
 
