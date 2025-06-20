@@ -11,7 +11,6 @@ import kotlin.math.sqrt
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import androidx.core.graphics.scale
-import androidx.core.content.edit
 
 class FaceRecognizer(private val context: Context, modelPath: String) {
 
@@ -69,15 +68,6 @@ class FaceRecognizer(private val context: Context, modelPath: String) {
     fun enrollEmbedding(bitmap: Bitmap) {
         enrolledEmbedding = extractEmbedding(bitmap)
         saveEmbeddingToPrefs(enrolledEmbedding!!)
-    }
-
-    private fun l2Normalize(vector: FloatArray): FloatArray {
-        var sum = 0f
-        for (v in vector) {
-            sum += v * v
-        }
-        val norm = sqrt(sum)
-        return vector.map { it / norm }.toFloatArray()
     }
 
 

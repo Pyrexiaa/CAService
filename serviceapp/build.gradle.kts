@@ -51,6 +51,8 @@ dependencies {
     implementation(libs.androidx.ui.geometry.android)
     implementation(libs.litert)
     implementation(libs.androidx.room.external.antlr)
+    implementation(libs.ads.mobile.sdk)
+    implementation(libs.firebase.crashlytics.buildtools)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -63,6 +65,7 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
-
-
+    // audio processing
+    implementation (libs.core)
+    implementation (libs.jvm)
 }
