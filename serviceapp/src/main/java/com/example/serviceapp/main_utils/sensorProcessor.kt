@@ -48,7 +48,7 @@ class SensorProcessor(private val context: Context) {
                 val z = parts[4].toFloatOrNull() ?: return@forEach
 
                 when {
-                    "Accelerometer" in sensorType -> {
+                    "Acceleration" in sensorType -> {
                         accelX.add(Entry(xValue, x))
                         accelY.add(Entry(xValue, y))
                         accelZ.add(Entry(xValue, z))

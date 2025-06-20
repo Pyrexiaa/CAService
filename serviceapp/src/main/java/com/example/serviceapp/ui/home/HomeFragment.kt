@@ -149,8 +149,18 @@ class HomeFragment : Fragment() {
         }
 
         // Gait buttons
-        binding.btnGaitEnroll.setOnClickListener { startCountdown("Enrolling Gait") { gaitRecognizer.collectForEnrollment(requireContext()) } }
-        binding.btnGaitVerify.setOnClickListener { startCountdown("Verifying Gait") { gaitRecognizer.collectForVerification(requireContext()) { conf, match -> showResult(conf, match) } } }
+        binding.btnGaitEnroll.setOnClickListener {
+            startCountdown("Enrolling Gait") {
+                gaitRecognizer.collectForEnrollment(requireContext())
+            }
+        }
+        binding.btnGaitVerify.setOnClickListener {
+            startCountdown("Verifying Gait") {
+                gaitRecognizer.collectForVerification(requireContext()) {
+                     conf, match -> showResult(conf, match)
+                }
+            }
+        }
     }
 
     private fun showResult(conf: Float, match: Boolean) {

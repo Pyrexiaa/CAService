@@ -36,9 +36,9 @@ class AudioRecognizer(private val context: Context, modelPath: String) {
     private var enrolledEmbedding: FloatArray? = null
 
     private fun extractMFCCFeaturesFromWav(filePath: String): FloatArray? {
-        val sampleRate = 16000
+        val sampleRate = 22050
         val bufferSize = 2048
-        val overlap = 1024
+        val overlap = 512
         val nMFCC = 13
 
         val audioFile = File(filePath)
@@ -65,10 +65,8 @@ class AudioRecognizer(private val context: Context, modelPath: String) {
             fileInputStream.read(fmtChunkID) // "fmt "
             val fmtChunkSize = readLittleEndianInt(fileInputStream) // Subchunk size (16 for PCM)
 
-            val audioFormatCode = readLittleEndianShort(fileInputStream) // 1 for PCM
             val numChannels = readLittleEndianShort(fileInputStream).toInt()
             val sampleRate = readLittleEndianInt(fileInputStream)
-            val byteRate = readLittleEndianInt(fileInputStream)
             val blockAlign = readLittleEndianShort(fileInputStream)
             val bitsPerSample = readLittleEndianShort(fileInputStream).toInt()
 
@@ -79,7 +77,6 @@ class AudioRecognizer(private val context: Context, modelPath: String) {
 
             val dataChunkID = ByteArray(4)
             fileInputStream.read(dataChunkID) // "data"
-            val dataChunkSize = readLittleEndianInt(fileInputStream) // Size of actual audio data
 
             // You now have the necessary header info
             Log.d("WavHeader", "Sample Rate: $sampleRate, Channels: $numChannels, BitsPerSample: $bitsPerSample")
@@ -129,8 +126,8 @@ class AudioRecognizer(private val context: Context, modelPath: String) {
             Log.e("MFCCExtractor", "Error during dispatcher run: ${e.message}")
             return null
         } finally {
-            dispatcher?.stop() // Always stop the dispatcher
-            fileInputStream?.close() // Ensure the file input stream is closed
+            dispatcher.stop() // Always stop the dispatcher
+            fileInputStream.close() // Ensure the file input stream is closed
         }
 
         if (mfccList.isEmpty()) {
@@ -199,7 +196,7 @@ class AudioRecognizer(private val context: Context, modelPath: String) {
         return (((b2.toInt() and 0xFF) shl 8) or (b1.toInt() and 0xFF)).toShort()
     }
 
-    fun convertToByteBuffer(floatArray: FloatArray): ByteBuffer {
+    private fun convertToByteBuffer(floatArray: FloatArray): ByteBuffer {
         val byteBuffer = ByteBuffer.allocateDirect(4 * floatArray.size)
         byteBuffer.order(ByteOrder.nativeOrder())
         for (value in floatArray) {
@@ -209,14 +206,14 @@ class AudioRecognizer(private val context: Context, modelPath: String) {
         return byteBuffer
     }
 
-    fun extractEmbedding(audioFilePath: String): FloatArray? {
+    private fun extractEmbedding(audioFilePath: String): FloatArray? {
         val inputFeatures = extractMFCCFeaturesFromWav(audioFilePath) ?: return null
         val scaledInputFeatures = modelScaler.applyStandardScaling(inputFeatures)
         return convertToByteBuffer(scaledInputFeatures)
             .let { modelRunner.run(it) } // modelRunner should accept ByteBuffer
     }
 
-    fun enrollEmbedding(audioFilePath: String) : FloatArray? {
+    private fun enrollEmbedding(audioFilePath: String) : FloatArray? {
         enrolledEmbedding = extractEmbedding(audioFilePath)
         saveEmbeddingToPrefs(enrolledEmbedding!!)
         return enrolledEmbedding
@@ -235,7 +232,7 @@ class AudioRecognizer(private val context: Context, modelPath: String) {
         }
     }
 
-    fun loadEmbeddingFromPrefs(): FloatArray? {
+    private fun loadEmbeddingFromPrefs(): FloatArray? {
         val str = prefs.getString("embedding", null) ?: return null
         val parts = str.split(",")
 
