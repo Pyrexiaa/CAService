@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 rootProject.name = "CAService"
 include(":app")
 include(":serviceapp")
+include(":openCVLibrary")

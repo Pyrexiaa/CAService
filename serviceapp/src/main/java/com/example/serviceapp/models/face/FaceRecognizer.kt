@@ -11,6 +11,7 @@ import kotlin.math.sqrt
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import androidx.core.graphics.scale
+import androidx.core.graphics.get
 
 class FaceRecognizer(private val context: Context, modelPath: String) {
 
@@ -18,51 +19,47 @@ class FaceRecognizer(private val context: Context, modelPath: String) {
     private val prefs: SharedPreferences = context.getSharedPreferences("FacePrefs", Context.MODE_PRIVATE)
     private var enrolledEmbedding: FloatArray? = null
 
-    fun preprocessImage(bitmap: Bitmap): ByteBuffer {
-        val inputSize = 16
+    private fun preprocessImage(bitmap: Bitmap): ByteBuffer {
+        val inputSize = 128
+        val numChannels = 1
+        val batchSize = 1
+
+        // Resize the bitmap to 128x128
         val resizedBitmap = bitmap.scale(inputSize, inputSize)
 
-        // We'll create a float array for 3 channels * 16 * 16 = 768 values
-        val pixels = IntArray(inputSize * inputSize)
-        resizedBitmap.getPixels(pixels, 0, inputSize, 0, 0, inputSize, inputSize)
+        // Prepare the ByteBuffer (float32 = 4 bytes)
+        val byteBuffer = ByteBuffer.allocateDirect(batchSize * numChannels * inputSize * inputSize * 4)
+        byteBuffer.order(ByteOrder.nativeOrder())
 
-        val tensor768 = FloatArray(3 * inputSize * inputSize)
+        // Convert to grayscale and normalize
+        for (y in 0 until inputSize) {
+            for (x in 0 until inputSize) {
+                val pixel = resizedBitmap[x, y]
 
-        for (i in pixels.indices) {
-            val color = pixels[i]
-            val r = (Color.red(color) / 255.0f - 0.5f) / 0.5f  // normalize ~ [-1, 1]
-            val g = (Color.green(color) / 255.0f - 0.5f) / 0.5f
-            val b = (Color.blue(color) / 255.0f - 0.5f) / 0.5f
-            // Store in CHW order like PyTorch (C=3, H=16, W=16)
-            val x = i % inputSize
-            val y = i / inputSize
-            tensor768[0 * 256 + y * inputSize + x] = r
-            tensor768[1 * 256 + y * inputSize + x] = g
-            tensor768[2 * 256 + y * inputSize + x] = b
+                // Extract RGB values
+                val r = Color.red(pixel)
+                val g = Color.green(pixel)
+                val b = Color.blue(pixel)
+
+                // Convert to grayscale using standard luminance formula
+                val gray = (0.299 * r + 0.587 * g + 0.114 * b).toFloat()
+
+                // Normalize to [0, 1]
+                val normalized = gray / 255.0f
+
+                byteBuffer.putFloat(normalized)
+            }
         }
 
-        // Now reduce 768 → 256 by average pooling along channel dimension
-        val tensor256 = FloatArray(256)
-        for (i in 0 until 256) {
-            // average r,g,b values at corresponding positions
-            tensor256[i] = (tensor768[i] + tensor768[i + 256] + tensor768[i + 512]) / 3f
-        }
-
-        // Convert to ByteBuffer for model input
-        val byteBuffer = ByteBuffer.allocateDirect(256 * 4).order(ByteOrder.nativeOrder())
-        tensor256.forEach { byteBuffer.putFloat(it) }
         byteBuffer.rewind()
-
         return byteBuffer
     }
 
-
-    fun extractEmbedding(bitmap: Bitmap): FloatArray {
-        val resizedBitmap = bitmap.scale(112, 112)
+    private fun extractEmbedding(bitmap: Bitmap): FloatArray {
+        val resizedBitmap = bitmap.scale(128, 128)
         val inputBuffer = preprocessImage(resizedBitmap)
         val embedding = modelRunner.run(inputBuffer)
         return embedding
-//        return l2Normalize(embedding)
     }
 
     fun enrollEmbedding(bitmap: Bitmap) {

@@ -111,7 +111,7 @@ class HomeFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        faceRecognizer = FaceRecognizer(requireContext(), "custom_face_last_linear_layer_float16.tflite")
+        faceRecognizer = FaceRecognizer(requireContext(), "light_cnn_float16.tflite")
         audioRecognizer = AudioRecognizer(requireContext(), "custom_audio_model_float16.tflite")
         gaitRecognizer = GaitRecognizer(requireContext(), "custom_gait_model_float16.tflite")
 
