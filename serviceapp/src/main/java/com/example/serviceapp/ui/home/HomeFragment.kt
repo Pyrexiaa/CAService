@@ -1,6 +1,7 @@
 package com.example.serviceapp.ui.home
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -31,6 +32,8 @@ import com.example.serviceapp.models.face.FaceRecognizer
 import com.example.serviceapp.models.gait.GaitRecognizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import java.io.File
+import java.io.FileOutputStream
 
 class HomeFragment : Fragment() {
 
@@ -63,8 +66,10 @@ class HomeFragment : Fragment() {
         // Register the launcher BEFORE fragment is created
         captureImageLauncher = registerForActivityResult(ActivityResultContracts.TakePicturePreview()) { imageBitmap ->
             if (imageBitmap != null) {
-                bitmap = imageBitmap
-                processFace(bitmap)
+                val orientation = faceCapturePrompts[currentPromptIndex]
+                faceCaptures.add(Pair(imageBitmap, orientation))
+                currentPromptIndex++
+                promptAndCaptureNext()
             } else {
                 Toast.makeText(requireContext(), "Failed to capture image", Toast.LENGTH_SHORT).show()
             }
@@ -72,6 +77,20 @@ class HomeFragment : Fragment() {
 
         captureImageLauncherForVerification = registerForActivityResult(ActivityResultContracts.TakePicturePreview()) { imageBitmap ->
             if (imageBitmap != null) {
+                val previewWidth = imageBitmap.width
+                val previewHeight = imageBitmap.height
+                Log.d("PreviewSize","Width: $previewWidth, Height: $previewHeight")
+
+                val previewDir = File(requireContext().filesDir, "preview").apply { mkdirs() }
+                val previewImageFile = File(previewDir, "preview_bitmap.png")
+
+                FileOutputStream(previewImageFile).use { out ->
+                    imageBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    out.flush()
+                }
+
+                Log.d("PreviewSave", "Saved preview image to: ${previewImageFile.absolutePath}")
+
                 verifyFace(imageBitmap) { confidence, isMatch ->
                     Toast.makeText(requireContext(), "Confidence: $confidence, Match: $isMatch", Toast.LENGTH_SHORT).show()
                 }
@@ -107,36 +126,52 @@ class HomeFragment : Fragment() {
         }
     }
 
+    private var recordingStartTime: Long = 0L
+    private var gaitStartTime: Long = 0L
+
     @RequiresApi(Build.VERSION_CODES.P)
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
         faceRecognizer = FaceRecognizer(requireContext(), "light_cnn_float16.tflite")
-        audioRecognizer = AudioRecognizer(requireContext(), "custom_audio_model_float16.tflite")
+        audioRecognizer = AudioRecognizer(requireContext(), "custom_audio_model_float16.tflite", "mfcc_model.tflite")
         gaitRecognizer = GaitRecognizer(requireContext(), "custom_gait_model_float16.tflite")
 
         // Face buttons
-        binding.btnFaceEnroll.setOnClickListener { captureImageLauncher.launch(null) }
+        binding.btnFaceEnroll.setOnClickListener {
+            startFaceEnrollmentCapture()
+        }
         binding.btnFaceVerify.setOnClickListener { captureImageLauncherForVerification.launch(null) }
 
         // Audio buttons
-        binding.btnAudioEnroll.setOnClickListener {
+        binding.btnStartRecording.setOnClickListener {
             if (hasAudioPermission()) {
-                startCountdown("Enrolling Audio") {
-                    @Suppress("MissingPermission")
-                    audioRecognizer.recordForEnrollment(requireContext()) { embedding ->
-                        // This is the onSuccess callback
-                        if (embedding != null) {
-                            // Use the embedding (e.g., store it, compare it)
-                            Log.d("AudioEnrollment", "Embedding extracted successfully: ${embedding.contentToString()}")
-                        } else {
-                            // Handle the case where the embedding is null (e.g., recording failed)
-                            Log.e("AudioEnrollment", "Embedding extraction failed.")
-                        }
-                    }
-                }
+                recordingStartTime = System.currentTimeMillis()
+
+                @Suppress("MissingPermission")
+                audioRecognizer.startRecording(requireContext())
+                Toast.makeText(requireContext(), "Recording started. Speak now.", Toast.LENGTH_SHORT).show()
             } else {
                 requestAudioPermission()
+            }
+        }
+
+        binding.btnStopRecording.setOnClickListener {
+            val duration = System.currentTimeMillis() - recordingStartTime
+            val minDurationMillis = 5000  // 5 seconds
+
+            if (duration < minDurationMillis) {
+                audioRecognizer.cancelRecording()
+                Toast.makeText(requireContext(), "Recording too short. Please record at least 5 seconds.", Toast.LENGTH_SHORT).show()
+            } else {
+                audioRecognizer.stopAndExtractEmbedding(requireContext()) { embedding ->
+                    if (embedding != null) {
+                        Log.d("AudioEnrollment", "Embedding extracted successfully: ${embedding.contentToString()}")
+                        // Save or process embedding
+                    } else {
+                        Log.e("AudioEnrollment", "Failed to extract embedding.")
+                    }
+                }
             }
         }
         @Suppress("MissingPermission")
@@ -148,12 +183,28 @@ class HomeFragment : Fragment() {
             }
         }
 
-        // Gait buttons
-        binding.btnGaitEnroll.setOnClickListener {
-            startCountdown("Enrolling Gait") {
-                gaitRecognizer.collectForEnrollment(requireContext())
+        binding.btnGaitStart.setOnClickListener {
+            gaitStartTime = System.currentTimeMillis()
+            gaitRecognizer.startGaitCollection(requireContext())
+            Toast.makeText(requireContext(), "Gait recording started.", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnGaitStop.setOnClickListener {
+            val duration = System.currentTimeMillis() - gaitStartTime
+            if (duration < 5000) {
+                gaitRecognizer.cancelGaitCollection()
+                Toast.makeText(requireContext(), "Recording too short. Please walk for at least 5 seconds.", Toast.LENGTH_SHORT).show()
+            } else {
+                gaitRecognizer.stopAndExtractGaitEmbedding(requireContext()) { embedding ->
+                    if (embedding != null) {
+                        Log.d("GaitEnrollment", "Gait embedding extracted: ${embedding.contentToString()}")
+                    } else {
+                        Log.e("GaitEnrollment", "Failed to extract gait embedding.")
+                    }
+                }
             }
         }
+
         binding.btnGaitVerify.setOnClickListener {
             startCountdown("Verifying Gait") {
                 gaitRecognizer.collectForVerification(requireContext()) {
@@ -227,7 +278,7 @@ class HomeFragment : Fragment() {
     // Use face recognition model, not face detection
     private val faceDetector = FaceDetection.getClient(detectorOptions)
 
-    private fun processFace(imageBitmap: Bitmap) {
+    private fun processFace(imageBitmap: Bitmap, orientation: String, onComplete: () -> Unit) {
         val inputImage = InputImage.fromBitmap(imageBitmap, 0)
 
         faceDetector.process(inputImage)
@@ -235,16 +286,18 @@ class HomeFragment : Fragment() {
                 if (faces.isNotEmpty()) {
                     val face = faces[0]
                     val faceBitmap = cropFace(imageBitmap, face.boundingBox)
-                    // Extract and enroll the face embedding using FaceRecognizer
-                    faceRecognizer.enrollEmbedding(faceBitmap)
+                    faceRecognizer.enrollEmbedding(faceBitmap, orientation)
 
-                    Toast.makeText(requireContext(), "Face enrolled", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), "Face enrolled: $orientation", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(requireContext(), "No face detected", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), "No face detected ($orientation)", Toast.LENGTH_SHORT).show()
                 }
+                Log.d("ProcessFace", "Processing face for orientation: $orientation")
+                onComplete()
             }
             .addOnFailureListener { e ->
-                Toast.makeText(requireContext(), "Detection failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), "Detection failed ($orientation): ${e.message}", Toast.LENGTH_SHORT).show()
+                onComplete()
             }
     }
 
@@ -260,7 +313,7 @@ class HomeFragment : Fragment() {
                     val face = faces[0]
                     val faceBitmap = cropFace(bitmap, face.boundingBox)
                     val similarity = faceRecognizer.verifyFace(faceBitmap)
-                    val isMatch = similarity > 0.50f  // You can adjust the threshold
+                    val isMatch = similarity > 0.7548f  // Face threshold
                     onResult(similarity, isMatch)
                 } else {
                     onResult(0f, false)
@@ -279,6 +332,47 @@ class HomeFragment : Fragment() {
             box.bottom.coerceAtMost(original.height)
         )
         return Bitmap.createBitmap(original, safeBox.left, safeBox.top, safeBox.width(), safeBox.height())
+    }
+
+    private val faceCapturePrompts = listOf("Center", "Left", "Right", "Up", "Down")
+    private var currentPromptIndex = 0
+    private val faceCaptures = mutableListOf<Pair<Bitmap, String>>()
+
+    private fun startFaceEnrollmentCapture() {
+        currentPromptIndex = 0
+        faceCaptures.clear()
+        promptAndCaptureNext()
+    }
+
+    private fun promptAndCaptureNext() {
+        if (currentPromptIndex < faceCapturePrompts.size) {
+            val prompt = faceCapturePrompts[currentPromptIndex]
+            AlertDialog.Builder(requireContext())
+                .setTitle("Face Capture")
+                .setMessage("Please face $prompt and press OK to take a picture.")
+                .setCancelable(false)
+                .setPositiveButton("OK") { _, _ ->
+                    captureImageLauncher.launch(null)
+                }
+                .show()
+        } else {
+            processAllFaces()
+        }
+    }
+
+    // Make sure averageEmbedding is called asynchronously
+    private var completedCount = 0
+    private fun processAllFaces() {
+        completedCount = 0
+        for ((faceBitmap, orientation) in faceCaptures) {
+            processFace(faceBitmap, orientation) {
+                completedCount++
+                if (completedCount == faceCaptures.size) {
+                    faceRecognizer.averageEmbedding()
+                    Toast.makeText(requireContext(), "Enrollment complete", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     override fun onDestroyView() {

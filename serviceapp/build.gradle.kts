@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.androidx.room.external.antlr)
     implementation(libs.ads.mobile.sdk)
     implementation(libs.firebase.crashlytics.buildtools)
+    implementation(libs.material.v1120)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -68,4 +69,5 @@ dependencies {
     // audio processing
     implementation (libs.core)
     implementation (libs.jvm)
+    implementation(libs.tensorflow.lite.select.tf.ops.v2120)
 }

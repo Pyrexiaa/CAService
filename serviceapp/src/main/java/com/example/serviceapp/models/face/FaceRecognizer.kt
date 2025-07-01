@@ -62,20 +62,57 @@ class FaceRecognizer(private val context: Context, modelPath: String) {
         return embedding
     }
 
-    fun enrollEmbedding(bitmap: Bitmap) {
+    fun enrollEmbedding(bitmap: Bitmap, orientation: String) {
         enrolledEmbedding = extractEmbedding(bitmap)
-        saveEmbeddingToPrefs(enrolledEmbedding!!)
+        saveEmbeddingToPrefs(enrolledEmbedding!!, orientation)
+        Log.d("EnrollEmbedding", "Embedding extracted for $orientation")
     }
 
 
-    private fun saveEmbeddingToPrefs(embedding: FloatArray) {
+    private fun saveEmbeddingToPrefs(embedding: FloatArray, orientation: String) {
         val str = embedding.joinToString(",")
-        val success = prefs.edit().putString("embedding", str).commit()  // commit() returns Boolean
+        val success = prefs.edit().putString("embedding_${orientation}", str).commit()
 
         if (success) {
             Toast.makeText(context, "Face embedding saved successfully!", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(context, "Failed to save face embedding!", Toast.LENGTH_SHORT).show()
+        }
+        Log.d("SaveEmbedding", "Saving embedding for $orientation with size ${embedding.size}")
+    }
+
+    fun averageEmbedding() {
+        val orientations = listOf("Center", "Left", "Right", "Up", "Down")
+        val embeddings = mutableListOf<FloatArray>()
+
+        for (orientation in orientations) {
+            val str = prefs.getString("embedding_$orientation", null)
+            if (str != null) {
+                val floatArray = str.split(",").map { it.toFloat() }.toFloatArray()
+                embeddings.add(floatArray)
+            } else {
+                Toast.makeText(context, "Missing embedding for $orientation", Toast.LENGTH_SHORT).show()
+                return // Exit early if any embedding is missing
+            }
+        }
+
+        if (embeddings.isNotEmpty()) {
+            val embeddingSize = embeddings[0].size
+            val averaged = FloatArray(embeddingSize)
+
+            for (i in 0 until embeddingSize) {
+                averaged[i] = embeddings.map { it[i] }.average().toFloat()
+            }
+
+            // Save averaged embedding
+            val avgStr = averaged.joinToString(",")
+            val success = prefs.edit().putString("embedding", avgStr).commit()
+
+            if (success) {
+                Toast.makeText(context, "Average embedding saved successfully!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Failed to save average embedding!", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 

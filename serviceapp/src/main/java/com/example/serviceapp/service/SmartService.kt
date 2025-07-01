@@ -5,8 +5,13 @@ import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -20,16 +25,14 @@ import androidx.core.content.ContextCompat
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.joinAll
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 import java.io.IOException
+import java.lang.reflect.Array.get
+import java.lang.reflect.Array.set
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.*
+import androidx.core.content.edit
+import java.io.FileOutputStream
 
 class SmartService : Service() {
 
@@ -41,6 +44,10 @@ class SmartService : Service() {
     private lateinit var sensorHandler: SensorHandler
     private lateinit var cameraHandler: CameraHandler
     private lateinit var audioHandler: AudioHandler
+
+    private val prefs: SharedPreferences by lazy {
+        applicationContext.getSharedPreferences("RecordingPrefs", Context.MODE_PRIVATE)
+    }
 
     @RequiresPermission(Manifest.permission.CAMERA)
     override fun onCreate() {
@@ -74,6 +81,7 @@ class SmartService : Service() {
             audioStatus = false // mark audio as unusable
             sendConnectionStatus("Mic permission not granted. Continuing without mic.")
         }
+
     }
 
     // Handle cases where user might revoke mic or camera permission while the service is running.
@@ -107,42 +115,82 @@ class SmartService : Service() {
         startForeground(1, notification)
     }
 
-    // To prevent coroutine scope leak risk
+    // Helper properties for SharedPreferences access (these need to access the class-level 'prefs')
+    var currentAudioIndex: Int
+        get() {
+            Log.d("SmartServiceRecording", "Getting Audio Index: ${prefs.getInt("audio_index", 0)}")
+            return prefs.getInt("audio_index", 0)
+        }
+        set(value) {
+            Log.d("SmartServiceRecording", "Setting Audio Index to: $value")
+            val success = prefs.edit().putInt("audio_index", value).commit() // <--- Change to commit()
+            if (!success) {
+                Log.e("SmartServiceRecording", "Failed to commit audio_index: $value")
+            }
+        }
+
+    var currentSensorIndex: Int
+        get() {
+            Log.d("SmartServiceRecording", "Getting Sensor Index: ${prefs.getInt("sensor_index", 0)}")
+            return prefs.getInt("sensor_index", 0)
+        }
+        set(value) {
+            Log.d("SmartServiceRecording", "Setting Sensor Index to: $value")
+            val success = prefs.edit().putInt("sensor_index", value).commit() // <--- Change to commit()
+            if (!success) {
+                Log.e("SmartServiceRecording", "Failed to commit sensor_index: $value")
+            }
+        }
+
+    var currentImageIndex: Int
+        get() {
+            Log.d("SmartServiceRecording", "Getting Image Index: ${prefs.getInt("image_index", 0)}")
+            return prefs.getInt("image_index", 0)
+        }
+        set(value) {
+            Log.d("SmartServiceRecording", "Setting Image Index to: $value")
+            val success = prefs.edit().putInt("image_index", value).commit() // <--- Change to commit()
+            if (!success) {
+                Log.e("SmartServiceRecording", "Failed to commit image_index: $value")
+            }
+        }
+
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     private fun startRecordingSession() {
-        CoroutineScope(Dispatchers.IO).launch {
+        // This CoroutineScope should ideally be managed by a ViewModel or LifecycleOwner
+        // to prevent leaks. For demonstration, we'll keep it here, but be mindful.
+        // If 'this' is an Activity/Fragment, consider lifecycleScope.launch from androidx.lifecycle.lifecycleScope
+        // If 'this' is a Service, consider a SupervisorJob with the Service's lifecycle.
+        val recordingScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+        recordingScope.launch {
+            Log.d("SmartServiceRecording", "Started")
             val audioDir = File(filesDir, "audio").apply { mkdirs() }
             val sensorDir = File(filesDir, "sensor").apply { mkdirs() }
             val imageDir = File(filesDir, "image").apply { mkdirs() }
 
-            val maxFiles = 60
+            val MAX_CIRCULAR_FILES = 60 // Total files from index 0 to 59
 
-            // Reusable function to manage file renaming and rotation
-            fun shiftAndSaveFile(fileDir: File, prefix: String, extension: String, tempFile: File) {
-                // Delete oldest file
-                val oldestFile = File(fileDir, "${prefix}_1$extension")
-                if (oldestFile.exists()) {
-                    oldestFile.delete()
-                }
+            // Modified function to save file with circular logic
+            fun saveFileCircular(fileDir: File, prefix: String, extension: String, tempFile: File, currentIndex: Int): Int {
+                // Determine the final filename using the current index
+                val finalFileName = "${prefix}_${currentIndex}$extension"
+                val finalFile = File(fileDir, finalFileName)
 
-                // Shift existing files
-                for (i in 2..maxFiles) {
-                    val oldFile = File(fileDir, "${prefix}_$i$extension")
-                    if (oldFile.exists()) {
-                        val newFile = File(fileDir, "${prefix}_${i - 1}$extension")
-                        oldFile.renameTo(newFile)
-                    }
-                }
-
-                // Save new file as the latest one
-                val finalFile = File(fileDir, "${prefix}_$maxFiles$extension")
+                // Overwrite the file at this index
                 tempFile.copyTo(finalFile, overwrite = true)
-                tempFile.delete()
+                tempFile.delete() // Delete the temporary file
+
+                // Calculate the next index for the next recording
+                val nextIndex = (currentIndex + 1) % MAX_CIRCULAR_FILES
+                Log.d("SmartServiceRecording", "Saved ${finalFileName}. Next index will be $nextIndex for $prefix")
+                return nextIndex
             }
 
             while (isActive) {
                 val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.getDefault()).format(Date())
+
+                // Create temporary files
                 val tempAudioFile = File(audioDir, "temp_audio_$timestamp.pcm")
                 val tempSensorFile = File(sensorDir, "temp_sensor_$timestamp.txt")
                 val tempImageFile = File(imageDir, "temp_image_$timestamp.jpg")
@@ -151,73 +199,93 @@ class SmartService : Service() {
                     BufferedWriter(FileWriter(tempSensorFile))
                 } catch (e: IOException) {
                     Log.e("SmartService", "Sensor file creation failed: ${e.message}")
-                    delay(1000L)
+                    delay(1000L) // Wait a bit before retrying
                     continue
                 }
 
+                // Launch all required jobs concurrently
+                val jobs = mutableListOf<Job>()
+
                 val sensorJob = launch {
                     try {
+                        // Assuming sensorHandler.logSensorData writes to the provided writer
+                        // and handles its own internal buffering/flushing before returning
                         sensorHandler.logSensorData(writer, durationMillis = 1000L)
                     } catch (e: Exception) {
                         Log.e("SensorHandler", "Sensor logging failed: ${e.message}")
+                    } finally {
+                        // Ensure writer is closed for sensor data after logging
+                        try {
+                            writer.flush()
+                            writer.close()
+                        } catch (e: IOException) {
+                            Log.e("SmartService", "Error closing sensor writer: ${e.message}")
+                        }
                     }
                 }
+                jobs.add(sensorJob)
 
-                if (audioStatus && cameraStatus) {
+                if (audioStatus) {
                     val audioJob = launch {
                         try {
                             audioHandler.startMicRecording(tempAudioFile, durationMillis = 1000L)
                         } catch (e: Exception) {
                             Log.e("AudioHandler", "Mic recording failed: ${e.message}")
+                            // Clean up temp file if recording failed
+                            if (tempAudioFile.exists()) tempAudioFile.delete()
                         }
                     }
+                    jobs.add(audioJob)
+                }
 
+                if (cameraStatus) {
                     val imageJob = launch {
                         try {
                             cameraHandler.captureImage(outputFile = tempImageFile)
+
                         } catch (e: Exception) {
                             Log.e("CameraHandler", "Capture failed: ${e.message}")
+                            if (tempImageFile.exists()) tempImageFile.delete()
                         }
                     }
+                    jobs.add(imageJob)
+                }
 
-                    joinAll(sensorJob, audioJob, imageJob)
+
+                // Wait for all active capture jobs to complete
+                jobs.joinAll()
+
+                // Save files using circular logic and update indices
+                // Only save if the temporary file was actually created/filled
+                // For sensor data, the temp file should be valid since we wrote to it via 'writer'
+                currentSensorIndex = saveFileCircular(sensorDir, "sensor", ".txt", tempSensorFile, currentSensorIndex)
+
+
+                if (audioStatus && tempAudioFile.exists() && tempAudioFile.length() > 0) {
+                    currentAudioIndex = saveFileCircular(audioDir, "audio", ".pcm", tempAudioFile, currentAudioIndex)
                 } else if (audioStatus) {
-                    val audioJob = launch {
-                        try {
-                            audioHandler.startMicRecording(tempAudioFile, durationMillis = 1000L)
-                        } catch (e: Exception) {
-                            Log.e("AudioHandler", "Mic recording failed: ${e.message}")
-                        }
-                    }
-                    joinAll(sensorJob, audioJob)
-                } else if (cameraStatus) {
-                    val imageJob = launch {
-                        try {
-                            cameraHandler.captureImage(outputFile = tempImageFile)
-                        } catch (e: Exception) {
-                            Log.e("CameraHandler", "Capture failed: ${e.message}")
-                        }
-                    }
-                    joinAll(sensorJob, imageJob)
-                } else {
-                    sensorJob.join()
+                    Log.w("SmartService", "Audio file was expected but not created or is empty: ${tempAudioFile.name}")
+                    if (tempAudioFile.exists()) tempAudioFile.delete() // Ensure it's cleaned up
                 }
 
-                writer.flush()
-                writer.close()
+                if (cameraStatus && tempImageFile.exists() && tempImageFile.length() > 0) {
+                    currentImageIndex = saveFileCircular(imageDir, "image", ".jpg", tempImageFile, currentImageIndex)
+                } else if (cameraStatus) {
+                    Log.w("SmartService", "Image file was expected but not created or is empty: ${tempImageFile.name}")
+                    if (tempImageFile.exists()) tempImageFile.delete() // Ensure it's cleaned up
+                }
 
-                // Rotate and rename files to maintain max 60
-                shiftAndSaveFile(audioDir, "audio", ".pcm", tempAudioFile)
-                shiftAndSaveFile(sensorDir, "sensor", ".txt", tempSensorFile)
-                shiftAndSaveFile(imageDir, "image", ".jpg", tempImageFile)
+                // The delay for the next cycle
+                delay(500L)
             }
 
+            // This block will be executed if the 'while (isActive)' loop finishes
+            // (e.g., due to cancellation of recordingScope)
             withContext(Dispatchers.Main) {
-                sendConnectionStatus("Rolling session stopped. Last 60 segments stored.")
+                sendConnectionStatus("Rolling session stopped. Last $MAX_CIRCULAR_FILES segments stored.")
             }
         }
     }
-
 
     // region IPC via Messenger
     companion object {

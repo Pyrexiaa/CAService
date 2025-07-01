@@ -1,0 +1,17 @@
+{
+  "installationFolder": "/Users/jiayulim/AndroidStudioProjects/CAService/openCVLibrary/build/intermediates/prefab_package/release/prefab",
+  "gradlePath": ":openCVLibrary",
+  "packageInfo": {
+    "packageName": "openCVLibrary",
+    "packageSchemaVersion": 2,
+    "packageDependencies": [],
+    "modules": [
+      {
+        "moduleName": "opencv_jni_shared",
+        "moduleHeaders": "/Users/jiayulim/AndroidStudioProjects/CAService/openCVLibrary/native/jni/include",
+        "moduleExportLibraries": [],
+        "abis": []
+      }
+    ]
+  }
+}

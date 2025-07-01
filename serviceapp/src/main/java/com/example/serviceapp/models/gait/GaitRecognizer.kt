@@ -18,7 +18,6 @@ import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.pow
 import kotlin.math.sqrt
-import kotlin.random.Random
 
 class GaitRecognizer(private val context: Context, modelPath: String) {
 
@@ -70,7 +69,92 @@ class GaitRecognizer(private val context: Context, modelPath: String) {
             listOf(resampledX[i], resampledY[i], resampledZ[i])
         }
 
+        saveWindowToCsv(window, "gait_window.csv")
+
         return window
+    }
+
+    private fun extractRollingWindowsResampledGait(gaitFilePath: String): List<List<List<Double>>>? {
+        val lines = File(gaitFilePath).readLines().drop(1)
+        if (lines.isEmpty()) return null
+
+        val timeList = mutableListOf<Double>()
+        val xList = mutableListOf<Double>()
+        val yList = mutableListOf<Double>()
+        val zList = mutableListOf<Double>()
+
+        for (line in lines) {
+            val parts = line.split(",")
+            if (parts.size == 4) {
+                val time = parts[0].toDoubleOrNull() ?: continue
+                val x = parts[1].toDoubleOrNull() ?: continue
+                val y = parts[2].toDoubleOrNull() ?: continue
+                val z = parts[3].toDoubleOrNull() ?: continue
+                timeList.add(time)
+                xList.add(x)
+                yList.add(y)
+                zList.add(z)
+            }
+        }
+
+        if (timeList.size < 2) return null
+
+        val startTime = timeList.first()
+        val endTime = timeList.last()
+        val totalDuration = endTime - startTime
+
+        val targetSamplingRate = 50
+        val stepSize = 1.0  // 1-second step
+        val windowSize = 5.0 // 5-second window
+        val offset = if (totalDuration > 7.0) 1.0 else 0.0
+
+        val effectiveStart = startTime + offset
+        val effectiveEnd = endTime - offset
+
+        val uniformTimestamps = generateSequence(effectiveStart) { it + (1.0 / targetSamplingRate) }
+            .takeWhile { it <= effectiveEnd }
+            .toList()
+
+        val resampledX = resample(timeList, xList, uniformTimestamps)
+        val resampledY = resample(timeList, yList, uniformTimestamps)
+        val resampledZ = resample(timeList, zList, uniformTimestamps)
+
+        val totalSamples = uniformTimestamps.size
+        val windowSamples = (windowSize * targetSamplingRate).toInt()
+        val stepSamples = (stepSize * targetSamplingRate).toInt()
+
+        val windows = mutableListOf<List<List<Double>>>()
+        var index = 0
+        var start = 0
+
+        while (start + windowSamples <= totalSamples) {
+            val window = List(windowSamples) { i ->
+                listOf(
+                    resampledX[start + i],
+                    resampledY[start + i],
+                    resampledZ[start + i]
+                )
+            }
+            windows.add(window)
+
+            // Save each window to CSV
+            saveWindowToCsv(window, "gait_window_$index.csv")
+            index++
+            start += stepSamples
+        }
+
+        return if (windows.isNotEmpty()) windows else null
+    }
+
+    fun saveWindowToCsv(window: List<List<Double>>, outputPath: String) {
+        val file = File(context.cacheDir, outputPath)
+        file.bufferedWriter().use { out ->
+            out.write("x,y,z\n") // write header
+            for (row in window) {
+                out.write(row.joinToString(","))
+                out.write("\n")
+            }
+        }
     }
 
     private fun resample(time: List<Double>, values: List<Double>, targetTimes: List<Double>): List<Double> {
@@ -93,7 +177,7 @@ class GaitRecognizer(private val context: Context, modelPath: String) {
     }
 
 
-    private fun extractFeatures(window: List<List<Double>>): FloatArray? {
+    private fun extractFeatures(window: List<List<Double>>, index: Int): FloatArray? {
         if (window.isEmpty()) return null
 
         val features = mutableListOf<Double>()
@@ -125,8 +209,18 @@ class GaitRecognizer(private val context: Context, modelPath: String) {
         val floatFeatures = features.map { it.toFloat() }.toFloatArray()
         Log.d("FeatureExtraction", "Extracted ${floatFeatures.size} features")
 
+        saveFeaturesToCsv(floatFeatures, "gait_extracted_features_$index.csv")
         return floatFeatures
     }
+
+    fun saveFeaturesToCsv(features: FloatArray, outputPath: String) {
+        val file = File(context.cacheDir, outputPath)
+        file.bufferedWriter().use { out ->
+            out.write(features.joinToString(","))  // Save as one line
+            out.write("\n")
+        }
+    }
+
 
     private fun std(signal: List<Double>): Double {
         val mean = signal.average()
@@ -158,6 +252,7 @@ class GaitRecognizer(private val context: Context, modelPath: String) {
     private var sensorManager: SensorManager? = null
     private var accelerometer: Sensor? = null
     private var sensorListener: SensorEventListener? = null
+    private var startTime: Long = 0L
 
     fun collectForEnrollment(context: Context) {
         if (isCollecting) return
@@ -193,6 +288,124 @@ class GaitRecognizer(private val context: Context, modelPath: String) {
         }, 5000)
     }
 
+    fun startGaitCollection(context: Context) {
+        if (isCollecting) return
+
+        Toast.makeText(context, "Collecting gait data...", Toast.LENGTH_SHORT).show()
+        accelData.clear()
+        isCollecting = true
+
+        sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+
+        startTime = System.currentTimeMillis()
+
+        sensorListener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                if (!isCollecting || event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
+
+                val currentTime = System.currentTimeMillis()
+                val elapsed = (currentTime - startTime) / 1000.0
+                val x = event.values[0]
+                val y = event.values[1]
+                val z = event.values[2]
+                accelData.add("$elapsed,$x,$y,$z")
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        }
+
+        sensorManager?.registerListener(sensorListener, accelerometer, SensorManager.SENSOR_DELAY_FASTEST)
+    }
+
+    fun stopAndExtractGaitEmbedding(context: Context, onSuccess: (FloatArray?) -> Unit) {
+        if (!isCollecting) {
+            onSuccess(null)
+            return
+        }
+
+        isCollecting = false
+        sensorListener?.let { sensorManager?.unregisterListener(it) }
+
+        val durationMs = System.currentTimeMillis() - startTime
+        val minDurationMs = 5000
+
+        if (durationMs < minDurationMs) {
+            Toast.makeText(context, "Recording too short. Walk at least 5 seconds.", Toast.LENGTH_SHORT).show()
+            onSuccess(null)
+            return
+        }
+
+        val fileName = "enrollment_gait_temp.txt"
+        val file = File(context.cacheDir, fileName)
+
+        try {
+            // Step 1: Parse accelData into (timestamp, x, y, z)
+            val parsedData = accelData.mapNotNull { line ->
+                val parts = line.split(",")
+                if (parts.size == 4) {
+                    val time = parts[0].toDoubleOrNull()
+                    val x = parts[1].toDoubleOrNull()
+                    val y = parts[2].toDoubleOrNull()
+                    val z = parts[3].toDoubleOrNull()
+                    if (time != null && x != null && y != null && z != null) {
+                        listOf(time, x, y, z)
+                    } else null
+                } else null
+            }
+
+            val trimmedData = if (parsedData.isNotEmpty()) {
+                val firstTime = parsedData.first()[0]
+                val lastTime = parsedData.last()[0]
+                val totalDuration = lastTime - firstTime
+
+                if (totalDuration > 7.0) {
+                    // Step 2: Trim first and last 1s
+                    parsedData.filter { it[0] >= firstTime + 1 && it[0] <= lastTime - 1 }
+                } else {
+                    parsedData
+                }
+            } else {
+                emptyList()
+            }
+
+            // Step 3: Save filtered data to file
+            file.bufferedWriter().use { out ->
+                out.write("timestamp,acc_x,acc_y,acc_z\n")
+                trimmedData.forEach { row ->
+                    out.write("${row[0]},${row[1]},${row[2]},${row[3]}\n")
+                }
+            }
+
+            Log.d("GaitData", "Gait data saved to: ${file.absolutePath}")
+        } catch (e: Exception) {
+            Log.e("GaitData", "Failed to save gait data", e)
+            Toast.makeText(context, "Failed to save gait data.", Toast.LENGTH_SHORT).show()
+            onSuccess(null)
+            return
+        }
+
+        Thread {
+            val embedding = enrollEmbedding(file.absolutePath)
+            Handler(Looper.getMainLooper()).post {
+                if (embedding != null) {
+                    Log.d("Embedding", "Gait embedding extracted: ${embedding.joinToString()}")
+                    Toast.makeText(context, "Gait enrolled", Toast.LENGTH_SHORT).show()
+                } else {
+                    Log.e("Embedding", "Failed to extract gait embedding.")
+                    Toast.makeText(context, "Failed to extract gait embedding.", Toast.LENGTH_SHORT).show()
+                }
+                onSuccess(embedding)
+            }
+        }.start()
+    }
+
+    fun cancelGaitCollection() {
+        isCollecting = false
+        sensorManager?.unregisterListener(sensorListener)
+        accelData.clear()
+    }
+
     private fun stopCollection(context: Context) {
         isCollecting = false
         sensorListener?.let { sensorManager?.unregisterListener(it) }
@@ -225,17 +438,40 @@ class GaitRecognizer(private val context: Context, modelPath: String) {
         return byteBuffer
     }
 
+    // For verification purpose only
     private fun extractEmbedding(gaitFilePath: String): FloatArray? {
         val inputFeatures = extractWindows(gaitFilePath) ?: return null
-        val extractedFeatures = extractFeatures(inputFeatures) ?: return null
+        val extractedFeatures = extractFeatures(inputFeatures, 0) ?: return null
         val scaledInputFeatures = modelScaler.applyStandardScaling(extractedFeatures)
         return convertToByteBuffer(scaledInputFeatures).let {
             modelRunner.run(it)
         }
     }
 
+    // For enrollment purpose
+    private fun extractEmbeddingRolling(gaitFilePath: String): FloatArray? {
+        val resampled = extractRollingWindowsResampledGait(gaitFilePath) ?: return null
+
+        val embeddings = mutableListOf<FloatArray>()
+
+        for ((currentIndex, window) in resampled.withIndex()) {
+            val features = extractFeatures(window, currentIndex) ?: continue
+            val scaled = modelScaler.applyStandardScaling(features)
+            val embedding = convertToByteBuffer(scaled).let { modelRunner.run(it) }
+
+            embeddings.add(embedding)
+        }
+
+        if (embeddings.isEmpty()) return null
+
+        val embeddingSize = embeddings[0].size
+        return FloatArray(embeddingSize) { i ->
+            embeddings.map { it[i] }.average().toFloat()
+        }
+    }
+
     private fun enrollEmbedding(audioFilePath: String) : FloatArray? {
-        enrolledEmbedding = extractEmbedding(audioFilePath)
+        enrolledEmbedding = extractEmbeddingRolling(audioFilePath)
         saveEmbeddingToPrefs(enrolledEmbedding!!)
         return enrolledEmbedding
     }
@@ -321,7 +557,7 @@ class GaitRecognizer(private val context: Context, modelPath: String) {
         }
 
         val similarity = cosineSimilarity(newEmbedding, enrolledEmbedding)
-        val isMatch = similarity > 0.6f // threshold
+        val isMatch = similarity > 0.80f // threshold
         onResult(similarity, isMatch)
     }
 
