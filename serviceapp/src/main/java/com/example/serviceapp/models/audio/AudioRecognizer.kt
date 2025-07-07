@@ -14,6 +14,8 @@ import android.widget.Toast
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import com.example.serviceapp.models.tflite.TFLiteModelRunner
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.DataInputStream
 import java.io.File
 import java.io.FileInputStream
@@ -514,6 +516,32 @@ class AudioRecognizer(private val context: Context, modelPath: String, mfccPath:
                 }
             }
         }.start()
+    }
+
+    suspend fun verifyAudioFile(audioFile: File): Float {
+        return withContext(Dispatchers.IO) {
+            if (!audioFile.exists()) {
+                Log.e("verifyAudioFile", "Audio file does not exist: ${audioFile.absolutePath}")
+                return@withContext 0f
+            }
+
+            try {
+                val newEmbedding = extractEmbedding(audioFile.absolutePath)
+                val savedEmbedding = loadEmbeddingFromPrefs()
+
+                val confidence = if (newEmbedding != null && savedEmbedding != null) {
+                    cosineSimilarity(newEmbedding, savedEmbedding)
+                } else {
+                    0f
+                }
+
+                Log.d("verifyAudioFile", "Confidence Score: $confidence")
+                confidence
+            } catch (e: Exception) {
+                Log.e("verifyAudioFile", "Exception: ${e.message}")
+                0f
+            }
+        }
     }
 
     private fun cosineSimilarity(vec1: FloatArray, vec2: FloatArray): Float {

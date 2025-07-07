@@ -10,6 +10,7 @@
     android:background="#FAFAFA">
 
     <ScrollView
+        android:id="@+id/scrollView"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:fillViewport="true"
@@ -152,4 +153,132 @@
         </LinearLayout>
     </ScrollView>
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    <FrameLayout
+        android:id="@+id/container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <!-- Instruction Layout -->
+        <LinearLayout
+            android:id="@+id/faceDirectionGuide"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="#88000000"
+            android:padding="16dp"
+            android:visibility="gone"> <!-- Start hidden -->
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:alpha="0.9"
+                android:background="@android:color/white"
+                android:elevation="8dp"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingBottom="8dp"
+                    android:text="Face Enrollment Instructions"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:id="@+id/imgFaceCenter"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:contentDescription="Center"
+                        android:src="@drawable/face_center" />
+
+                    <ImageView
+                        android:id="@+id/imgFaceLeft"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:contentDescription="Left"
+                        android:src="@drawable/face_left" />
+
+                    <ImageView
+                        android:id="@+id/imgFaceRight"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:contentDescription="Right"
+                        android:src="@drawable/face_right" />
+
+                    <ImageView
+                        android:id="@+id/imgFaceUp"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:contentDescription="Up"
+                        android:src="@drawable/face_up" />
+
+                    <ImageView
+                        android:id="@+id/imgFaceDown"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:contentDescription="Down"
+                        android:src="@drawable/face_down" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingVertical="8dp"
+                    android:gravity="center"
+                    android:text="We will be taking photos from 5 directions"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btnStartCapture"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="Understood" />
+            </LinearLayout>
+        </LinearLayout>
+
+
+        <!-- Camera Preview and Capture Button -->
+        <androidx.camera.view.PreviewView
+            android:id="@+id/previewView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/btnCapture"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Capture"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="32dp"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <FrameLayout
+        android:id="@+id/loadingOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#80000000"
+        android:gravity="center"
+        android:visibility="gone">
+
+        <ProgressBar
+            android:id="@+id/progressBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center" />
+    </FrameLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>

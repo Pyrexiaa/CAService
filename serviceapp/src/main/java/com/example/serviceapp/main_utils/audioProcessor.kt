@@ -89,7 +89,7 @@ class AudioProcessor(
         }
 
         val audioDir = File(context.filesDir, "audio").apply { mkdirs() }
-        val targetFile = File(audioDir, "audio_${latestRecorderFileIndex}.pcm")
+        val targetFile = File(audioDir, "audio_${latestRecorderFileIndex}.wav")
 
         if (!targetFile.exists()) {
             Log.w("AudioProcessor", "Audio file ${targetFile.name} does not exist yet. Waiting for recorder.")

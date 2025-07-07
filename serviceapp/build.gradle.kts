@@ -54,9 +54,16 @@ dependencies {
     implementation(libs.ads.mobile.sdk)
     implementation(libs.firebase.crashlytics.buildtools)
     implementation(libs.material.v1120)
+    implementation(libs.androidx.core.i18n)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    // CameraX - custom control over camera
+    implementation (libs.androidx.camera.core)
+    implementation (libs.androidx.camera.camera2.v130)
+    implementation (libs.androidx.camera.lifecycle.v130)
+    implementation (libs.androidx.camera.view.v130)
+    implementation (libs.androidx.camera.extensions)
     //chart
     implementation(libs.mpandroidchart)
     // stable biometric version

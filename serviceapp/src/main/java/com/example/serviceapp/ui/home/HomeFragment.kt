@@ -1,37 +1,47 @@
 package com.example.serviceapp.ui.home
 
 import android.Manifest
+import android.app.Activity
 import android.app.AlertDialog
-import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.Color
-import androidx.biometric.BiometricPrompt
+import android.graphics.Matrix
+import android.hardware.Camera
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.util.Log
 import android.view.LayoutInflater
+import android.view.Surface
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageProxy
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
+import com.example.serviceapp.R
+import com.example.serviceapp.ServiceActivity
 import com.example.serviceapp.databinding.FragmentHomeBinding
-import com.example.serviceapp.main_utils.AudioProcessor
 import com.example.serviceapp.models.audio.AudioRecognizer
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.example.serviceapp.models.face.FaceRecognizer
 import com.example.serviceapp.models.gait.GaitRecognizer
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import java.io.File
 import java.io.FileOutputStream
 
@@ -41,16 +51,28 @@ class HomeFragment : Fragment() {
     // This property is only valid between onCreateView and
     // onDestroyView.
     private val binding get() = _binding!!
-    private lateinit var captureImageLauncher: ActivityResultLauncher<Void?>
-    private lateinit var captureImageLauncherForVerification: ActivityResultLauncher<Void?>
+    private lateinit var captureImageLauncherForVerification: ActivityResultLauncher<Intent>
 
-    private lateinit var bitmap: Bitmap
+    private val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+        putExtra("android.intent.extras.CAMERA_FACING", Camera.CameraInfo.CAMERA_FACING_FRONT) // Works on some
+        putExtra("android.intent.extras.LENS_FACING_FRONT", 1) // Works on some
+        putExtra("android.intent.extra.USE_FRONT_CAMERA", true) // Works on newer devices
+    }
+
+    // Camera X
+    private lateinit var imageCapture: ImageCapture
+    private lateinit var cameraProvider: ProcessCameraProvider
+    private var cameraBound = false
+    private lateinit var outputDirectory: File
+    private val faceCapturePrompts = listOf("Center", "Left", "Right", "Up", "Down")
+    private var currentPromptIndex = 0
+    private val faceCaptures = mutableListOf<Pair<Bitmap, String>>()
+
     private lateinit var faceRecognizer: FaceRecognizer
     private lateinit var audioRecognizer: AudioRecognizer
     private lateinit var gaitRecognizer: GaitRecognizer
 
     private val handler = Handler(Looper.getMainLooper())
-    private val coroutineScope = CoroutineScope(Dispatchers.Main)
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -64,43 +86,101 @@ class HomeFragment : Fragment() {
         val root: View = binding.root
 
         // Register the launcher BEFORE fragment is created
-        captureImageLauncher = registerForActivityResult(ActivityResultContracts.TakePicturePreview()) { imageBitmap ->
-            if (imageBitmap != null) {
-                val orientation = faceCapturePrompts[currentPromptIndex]
-                faceCaptures.add(Pair(imageBitmap, orientation))
-                currentPromptIndex++
-                promptAndCaptureNext()
-            } else {
-                Toast.makeText(requireContext(), "Failed to capture image", Toast.LENGTH_SHORT).show()
-            }
-        }
+        outputDirectory = requireContext().getExternalFilesDir("face_captures")!!
 
-        captureImageLauncherForVerification = registerForActivityResult(ActivityResultContracts.TakePicturePreview()) { imageBitmap ->
-            if (imageBitmap != null) {
-                val previewWidth = imageBitmap.width
-                val previewHeight = imageBitmap.height
-                Log.d("PreviewSize","Width: $previewWidth, Height: $previewHeight")
-
-                val previewDir = File(requireContext().filesDir, "preview").apply { mkdirs() }
-                val previewImageFile = File(previewDir, "preview_bitmap.png")
-
-                FileOutputStream(previewImageFile).use { out ->
-                    imageBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-                    out.flush()
-                }
-
-                Log.d("PreviewSave", "Saved preview image to: ${previewImageFile.absolutePath}")
-
-                verifyFace(imageBitmap) { confidence, isMatch ->
-                    Toast.makeText(requireContext(), "Confidence: $confidence, Match: $isMatch", Toast.LENGTH_SHORT).show()
-                }
-            } else {
-                Toast.makeText(requireContext(), "Failed to capture image", Toast.LENGTH_SHORT).show()
-            }
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(requireActivity(), arrayOf(Manifest.permission.CAMERA), 123)
         }
 
         return root
     }
+
+    private fun startCameraPreview() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext())
+
+        cameraProviderFuture.addListener({
+            cameraProvider = cameraProviderFuture.get()
+
+            val preview = Preview.Builder().build().also {
+                it.setSurfaceProvider(binding.previewView.surfaceProvider)
+            }
+
+            imageCapture = ImageCapture.Builder()
+                .setTargetRotation(requireActivity().windowManager.defaultDisplay.rotation)
+                .build()
+
+            val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
+
+            try {
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(viewLifecycleOwner, cameraSelector, preview, imageCapture)
+                cameraBound = true
+            } catch (e: Exception) {
+                Log.e("CameraX", "Failed to bind camera use cases", e)
+            }
+        }, ContextCompat.getMainExecutor(requireContext()))
+    }
+
+    private fun showCameraFullscreen() {
+        // Hide app's bottom nav
+        (requireActivity() as ServiceActivity).findViewById<BottomNavigationView>(R.id.nav_view)?.visibility = View.GONE
+
+        // Show your preview UI
+        binding.previewView.visibility = View.VISIBLE
+        binding.btnCapture.visibility = View.VISIBLE
+
+    }
+
+    private fun hideCameraFullscreen() {
+        // Show app's bottom nav again
+        (requireActivity() as ServiceActivity).findViewById<BottomNavigationView>(R.id.nav_view)?.visibility = View.VISIBLE
+
+        // Hide preview UI
+        binding.previewView.visibility = View.GONE
+        binding.btnCapture.visibility = View.GONE
+
+    }
+
+    private fun capturePhoto() {
+        imageCapture.takePicture(
+            ContextCompat.getMainExecutor(requireContext()),
+            object : ImageCapture.OnImageCapturedCallback() {
+                override fun onCaptureSuccess(imageProxy: ImageProxy) {
+                    val bitmap = imageProxy.toBitmap()
+                    imageProxy.close()
+
+                    if (bitmap == null) {
+                        Toast.makeText(requireContext(), "Failed to convert image", Toast.LENGTH_SHORT).show()
+                        binding.btnCapture.isEnabled = true
+                        return
+                    }
+
+                    val orientation = faceCapturePrompts[currentPromptIndex]
+
+                    processFace(bitmap, orientation) {
+                        faceCaptures.add(Pair(bitmap, orientation))
+
+                        hideCameraFullscreen()
+                        currentPromptIndex++
+                        binding.btnCapture.isEnabled = true
+
+                        // Hide loading and show next prompt
+                        binding.loadingOverlay.visibility = View.GONE
+                        promptAndCaptureNext()
+                    }
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    Log.e("FaceCapture", "Photo capture failed: ${exception.message}", exception)
+                    Toast.makeText(requireContext(), "Capture failed", Toast.LENGTH_SHORT).show()
+                    binding.btnCapture.isEnabled = true
+                }
+            }
+        )
+    }
+
 
     private fun hasAudioPermission() = ContextCompat.checkSelfPermission(
         requireContext(),
@@ -137,11 +217,20 @@ class HomeFragment : Fragment() {
         audioRecognizer = AudioRecognizer(requireContext(), "custom_audio_model_float16.tflite", "mfcc_model.tflite")
         gaitRecognizer = GaitRecognizer(requireContext(), "custom_gait_model_float16.tflite")
 
+        binding.faceDirectionGuide.visibility = View.GONE
+        binding.btnStartCapture.setOnClickListener {
+            binding.faceDirectionGuide.visibility = View.GONE
+            binding.btnCapture.isEnabled = true
+            promptAndCaptureNext()
+        }
+
         // Face buttons
         binding.btnFaceEnroll.setOnClickListener {
             startFaceEnrollmentCapture()
         }
-        binding.btnFaceVerify.setOnClickListener { captureImageLauncherForVerification.launch(null) }
+        binding.btnFaceVerify.setOnClickListener {
+            startFaceVerificationCapture()
+        }
 
         // Audio buttons
         binding.btnStartRecording.setOnClickListener {
@@ -235,38 +324,6 @@ class HomeFragment : Fragment() {
         }, 1000)
     }
 
-
-    @RequiresApi(Build.VERSION_CODES.P)
-    private fun showBiometricPrompt() {
-        val executor = ContextCompat.getMainExecutor(requireContext())
-
-        val biometricPrompt = BiometricPrompt(this, executor,
-            object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    super.onAuthenticationSucceeded(result)
-                    Toast.makeText(requireContext(), "Authentication succeeded", Toast.LENGTH_SHORT).show()
-                }
-
-                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    super.onAuthenticationError(errorCode, errString)
-                    Toast.makeText(requireContext(), "Authentication error: $errString", Toast.LENGTH_SHORT).show()
-                }
-
-                override fun onAuthenticationFailed() {
-                    super.onAuthenticationFailed()
-                    Toast.makeText(requireContext(), "Authentication failed", Toast.LENGTH_SHORT).show()
-                }
-            })
-
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Verify with Face or Fingerprint")
-            .setSubtitle("Use biometric authentication")
-            .setNegativeButtonText("Cancel")
-            .build()
-
-        biometricPrompt.authenticate(promptInfo)
-    }
-
     // Facial Detection and Recognition
 
     private val detectorOptions = FaceDetectorOptions.Builder()
@@ -278,8 +335,25 @@ class HomeFragment : Fragment() {
     // Use face recognition model, not face detection
     private val faceDetector = FaceDetection.getClient(detectorOptions)
 
+    private fun rotationDegrees(rotation: Int): Int {
+        return when (rotation) {
+            Surface.ROTATION_0 -> 0
+            Surface.ROTATION_90 -> 90
+            Surface.ROTATION_180 -> 180
+            Surface.ROTATION_270 -> 270
+            else -> 0
+        }
+    }
+
     private fun processFace(imageBitmap: Bitmap, orientation: String, onComplete: () -> Unit) {
-        val inputImage = InputImage.fromBitmap(imageBitmap, 0)
+        // Rotate the bitmap 90 degrees anticlockwise
+        val rotatedBitmap = rotateBitmap90AntiClockwise(imageBitmap)
+
+//        // Save bitmap for debugging
+//        saveBitmapForDebugging(rotatedBitmap, orientation)
+
+        val rotation = rotationDegrees(requireActivity().windowManager.defaultDisplay.rotation)
+        val inputImage = InputImage.fromBitmap(rotatedBitmap, rotation)
 
         faceDetector.process(inputImage)
             .addOnSuccessListener { faces ->
@@ -301,11 +375,37 @@ class HomeFragment : Fragment() {
             }
     }
 
+    private fun rotateBitmap90AntiClockwise(bitmap: Bitmap): Bitmap {
+        val matrix = Matrix().apply {
+            postRotate(-90f)  // Negative 90 degrees for anticlockwise rotation
+        }
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
 
+    private fun saveBitmapForDebugging(bitmap: Bitmap, orientation: String) {
+        try {
+            val debugDir = File(requireContext().filesDir, "debug_faces")
+            if (!debugDir.exists()) debugDir.mkdirs()
+            val debugFile = File(debugDir, "face_debug_${orientation}_${System.currentTimeMillis()}.png")
+            FileOutputStream(debugFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                out.flush()
+            }
+            Log.d("DebugSave", "Saved debug bitmap: ${debugFile.absolutePath}")
+        } catch (e: Exception) {
+            Log.e("DebugSave", "Failed to save debug bitmap: ${e.message}", e)
+        }
+    }
 
     private fun verifyFace(bitmap: Bitmap, onResult: (confidence: Float, isMatch: Boolean) -> Unit) {
+        // Rotate the bitmap 90 degrees anticlockwise
+        val rotatedBitmap = rotateBitmap90AntiClockwise(bitmap)
 
-        val inputImage = InputImage.fromBitmap(bitmap, 0)
+//        // Save bitmap for debugging
+//        saveBitmapForDebugging(rotatedBitmap, "verify")
+
+        val rotation = rotationDegrees(requireActivity().windowManager.defaultDisplay.rotation)
+        val inputImage = InputImage.fromBitmap(rotatedBitmap, rotation)
 
         faceDetector.process(inputImage)
             .addOnSuccessListener { faces ->
@@ -334,14 +434,70 @@ class HomeFragment : Fragment() {
         return Bitmap.createBitmap(original, safeBox.left, safeBox.top, safeBox.width(), safeBox.height())
     }
 
-    private val faceCapturePrompts = listOf("Center", "Left", "Right", "Up", "Down")
-    private var currentPromptIndex = 0
-    private val faceCaptures = mutableListOf<Pair<Bitmap, String>>()
+    private fun startFaceVerificationCapture() {
+        // Show camera and capture UI
+        binding.faceDirectionGuide.visibility = View.GONE // optional
+        showCameraFullscreen()
+
+        if (!cameraBound) startCameraPreview()
+
+        binding.previewView.visibility = View.VISIBLE
+        binding.btnCapture.visibility = View.VISIBLE
+        binding.btnCapture.text = "Verify"
+        binding.btnCapture.isEnabled = true
+
+        binding.btnCapture.setOnClickListener {
+            binding.btnCapture.isEnabled = false
+            // Show loading while processing
+            binding.loadingOverlay.visibility = View.VISIBLE
+            captureVerificationPhoto()
+        }
+    }
+
+    private fun captureVerificationPhoto() {
+        imageCapture.takePicture(
+            ContextCompat.getMainExecutor(requireContext()),
+            object : ImageCapture.OnImageCapturedCallback() {
+                override fun onCaptureSuccess(imageProxy: ImageProxy) {
+                    val bitmap = imageProxy.toBitmap()
+                    imageProxy.close()
+
+                    if (bitmap == null) {
+                        Toast.makeText(requireContext(), "Failed to convert image", Toast.LENGTH_SHORT).show()
+                        return
+                    }
+
+                    val previewDir = File(requireContext().filesDir, "preview").apply { mkdirs() }
+                    val previewImageFile = File(previewDir, "preview_bitmap.png")
+                    FileOutputStream(previewImageFile).use { out ->
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                        out.flush()
+                    }
+
+                    Log.d("Verification", "Saved image to: ${previewImageFile.absolutePath}")
+
+                    verifyFace(bitmap) { confidence, isMatch ->
+                        Toast.makeText(requireContext(), "Confidence: $confidence, Match: $isMatch", Toast.LENGTH_SHORT).show()
+                    }
+                    binding.loadingOverlay.visibility = View.GONE
+
+                    binding.previewView.visibility = View.GONE
+                    binding.btnCapture.visibility = View.GONE
+                    hideCameraFullscreen()
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    Log.e("Verification", "Photo capture failed: ${exception.message}", exception)
+                    Toast.makeText(requireContext(), "Capture failed", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+    }
 
     private fun startFaceEnrollmentCapture() {
         currentPromptIndex = 0
         faceCaptures.clear()
-        promptAndCaptureNext()
+        binding.faceDirectionGuide.visibility = View.VISIBLE
     }
 
     private fun promptAndCaptureNext() {
@@ -349,29 +505,26 @@ class HomeFragment : Fragment() {
             val prompt = faceCapturePrompts[currentPromptIndex]
             AlertDialog.Builder(requireContext())
                 .setTitle("Face Capture")
-                .setMessage("Please face $prompt and press OK to take a picture.")
+                .setMessage("Please face $prompt and press OK to continue.")
                 .setCancelable(false)
                 .setPositiveButton("OK") { _, _ ->
-                    captureImageLauncher.launch(null)
+                    // Show UI
+                    showCameraFullscreen()
+
+                    if (!cameraBound) startCameraPreview()
+
+                    // Set capture button listener
+                    binding.btnCapture.setOnClickListener {
+                        // Show loading while processing
+                        binding.loadingOverlay.visibility = View.VISIBLE
+                        binding.btnCapture.isEnabled = false
+                        capturePhoto()
+                    }
                 }
                 .show()
         } else {
-            processAllFaces()
-        }
-    }
-
-    // Make sure averageEmbedding is called asynchronously
-    private var completedCount = 0
-    private fun processAllFaces() {
-        completedCount = 0
-        for ((faceBitmap, orientation) in faceCaptures) {
-            processFace(faceBitmap, orientation) {
-                completedCount++
-                if (completedCount == faceCaptures.size) {
-                    faceRecognizer.averageEmbedding()
-                    Toast.makeText(requireContext(), "Enrollment complete", Toast.LENGTH_SHORT).show()
-                }
-            }
+            Toast.makeText(requireContext(), "All face captures done!", Toast.LENGTH_SHORT).show()
+            faceRecognizer.averageEmbedding()
         }
     }
 

@@ -11,6 +11,8 @@ import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import com.example.serviceapp.models.tflite.TFLiteModelRunner
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -525,6 +527,32 @@ class GaitRecognizer(private val context: Context, modelPath: String) {
             stopVerificationCollection(context, onResult)
         }, 5000)
     }
+
+    suspend fun verifyGaitFile(file: File): Float = withContext(Dispatchers.IO) {
+        if (!file.exists()) {
+            Log.e("verifyGaitFile", "Gait file does not exist: ${file.absolutePath}")
+            return@withContext 0f
+        }
+
+        try {
+            // Extract new embedding from the gait file
+            val newEmbedding = extractEmbedding(file.absolutePath)
+            val savedEmbedding = loadEmbeddingFromPrefs()
+
+            val confidence = if (newEmbedding != null && savedEmbedding != null) {
+                cosineSimilarity(newEmbedding, savedEmbedding)
+            } else {
+                0f
+            }
+
+            Log.d("verifyGaitFile", "Gait verification confidence: $confidence")
+            return@withContext confidence
+        } catch (e: Exception) {
+            Log.e("verifyGaitFile", "Exception during gait verification: ${e.message}")
+            return@withContext 0f
+        }
+    }
+
 
     private fun stopVerificationCollection(
         context: Context,

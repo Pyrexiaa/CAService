@@ -191,7 +191,7 @@ class SmartService : Service() {
                 val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.getDefault()).format(Date())
 
                 // Create temporary files
-                val tempAudioFile = File(audioDir, "temp_audio_$timestamp.pcm")
+                val tempAudioFile = File(audioDir, "temp_audio_$timestamp.wav")
                 val tempSensorFile = File(sensorDir, "temp_sensor_$timestamp.txt")
                 val tempImageFile = File(imageDir, "temp_image_$timestamp.jpg")
 
@@ -262,7 +262,7 @@ class SmartService : Service() {
 
 
                 if (audioStatus && tempAudioFile.exists() && tempAudioFile.length() > 0) {
-                    currentAudioIndex = saveFileCircular(audioDir, "audio", ".pcm", tempAudioFile, currentAudioIndex)
+                    currentAudioIndex = saveFileCircular(audioDir, "audio", ".wav", tempAudioFile, currentAudioIndex)
                 } else if (audioStatus) {
                     Log.w("SmartService", "Audio file was expected but not created or is empty: ${tempAudioFile.name}")
                     if (tempAudioFile.exists()) tempAudioFile.delete() // Ensure it's cleaned up

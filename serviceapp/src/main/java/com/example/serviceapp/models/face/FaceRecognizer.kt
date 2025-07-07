@@ -74,9 +74,9 @@ class FaceRecognizer(private val context: Context, modelPath: String) {
         val success = prefs.edit().putString("embedding_${orientation}", str).commit()
 
         if (success) {
-            Toast.makeText(context, "Face embedding saved successfully!", Toast.LENGTH_SHORT).show()
+            Log.d("FaceEmbedding", "Face embedding saved successfully!")
         } else {
-            Toast.makeText(context, "Failed to save face embedding!", Toast.LENGTH_SHORT).show()
+            Log.d("FaceEmbedding", "Failed to save face embedding!")
         }
         Log.d("SaveEmbedding", "Saving embedding for $orientation with size ${embedding.size}")
     }
@@ -109,9 +109,9 @@ class FaceRecognizer(private val context: Context, modelPath: String) {
             val success = prefs.edit().putString("embedding", avgStr).commit()
 
             if (success) {
-                Toast.makeText(context, "Average embedding saved successfully!", Toast.LENGTH_SHORT).show()
+                Log.d("FaceEmbedding", "Average embedding saved successfully!")
             } else {
-                Toast.makeText(context, "Failed to save average embedding!", Toast.LENGTH_SHORT).show()
+                Log.d("FaceEmbedding", "Failed to save average embedding!")
             }
         }
     }

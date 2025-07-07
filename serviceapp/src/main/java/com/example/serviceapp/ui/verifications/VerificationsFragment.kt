@@ -40,11 +40,18 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 import androidx.core.graphics.scale
+import com.github.mikephil.charting.components.LimitLine
+import com.github.mikephil.charting.formatter.ValueFormatter
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.io.ByteArrayOutputStream
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
 
 class VerificationsFragment : Fragment() {
 
@@ -145,27 +152,19 @@ class VerificationsFragment : Fragment() {
         gaitRecognizer = GaitRecognizer(requireContext(), "custom_gait_model_float16.tflite")
 
         // Check if at least one modality is enrolled to load historical data
-        if (isFaceEnrolled || isAudioEnrolled || isGaitEnrolled) {
+        if (isFaceEnrolled) {
             startFaceVerificationLoop()
+        }
 
-            val audioData = if (isAudioEnrolled) loadConfidenceData("audio.txt") else emptyList()
-            val gaitData = if (isGaitEnrolled) loadConfidenceData("gait.txt") else emptyList()
+        if (isAudioEnrolled) {
+            startAudioVerificationLoop()
+        }
+
+        if (isAudioEnrolled || isGaitEnrolled) {
+            startGaitVerificationLoop()
 
             val combinedData = combineConfidenceScores(faceScores, audioScores, gaitScores)
-//
-//            // Setup and plot historical charts
-//            if (faceData.isNotEmpty()) {
-//                setupChartAxesAndAppearance(binding.chartFace, "Real-time Face Confidence")
-//                plotChartData(binding.chartFace, "Face", faceData)
-//            }
-            if (audioData.isNotEmpty()) {
-                setupChartAxesAndAppearance(binding.chartAudio, "Real-time Audio Confidence")
-                plotChartData(binding.chartAudio, "Audio", audioData)
-            }
-            if (gaitData.isNotEmpty()) {
-                setupChartAxesAndAppearance(binding.chartGait, "Real-time Gait Confidence")
-                plotChartData(binding.chartGait, "Gait", gaitData)
-            }
+
             if (combinedData.isNotEmpty()) {
                 setupChartAxesAndAppearance(binding.chartCombined, "Real-time Combined Confidence")
                 plotChartData(binding.chartCombined, "Combined", combinedData)
@@ -236,7 +235,6 @@ class VerificationsFragment : Fragment() {
     private var faceProcessingJob: Job? = null // This job will collect from the channel
 
     // --- Modified startFaceVerificationLoop to send to the channel ---
-
     private fun startFaceVerificationLoop() {
         val imageDir = File(requireContext().filesDir, "image")
         if (!imageDir.exists()) {
@@ -302,8 +300,254 @@ class VerificationsFragment : Fragment() {
 
                 withContext(Dispatchers.Main) {
                     setupChartAxesAndAppearance(binding.chartFace, "Real-time Face Confidence")
-                    plotChartData(binding.chartFace, "Face", faceScores)
+                    plotChartData(binding.chartFace, "Face", faceScores, currentIndex)
                 }
+            }
+        }
+    }
+
+    // Audio Job
+    private var audioLoopJob: Job? = null
+    private var audioProcessingJob: Job? = null
+    private val _newAudioDetectedChannel = Channel<Int>(Channel.CONFLATED)
+    private var previousAudioIndex = -1
+
+    private fun startAudioVerificationLoop() {
+        val audioDir = File(requireContext().filesDir, "audio")
+        if (!audioDir.exists()) {
+            Log.w("VerificationsFragment", "Audio directory does not exist.")
+            return
+        }
+
+        // Start audio processing once
+        startAudioProcessing()
+
+        audioLoopJob = lifecycleScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                val current = audioIndex // Replace with your method to get current audio index
+                if (current != previousAudioIndex) {
+                    previousAudioIndex = current
+                    _newAudioDetectedChannel.trySend(current).getOrThrow()
+                }
+                delay(100) // Check every 100ms for new audio
+            }
+        }
+    }
+
+    private fun startAudioProcessing() {
+        audioProcessingJob?.cancel()
+        audioProcessingJob = lifecycleScope.launch(Dispatchers.IO) {
+            _newAudioDetectedChannel.receiveAsFlow().collect { currentIndex ->
+                val audioFile = File(requireContext().filesDir, "audio/audio_${currentIndex}.wav")
+                if (!audioFile.exists()) {
+                    Log.d("VerificationsFragment", "Audio file does not exist: audio_${currentIndex}.wav")
+                    return@collect
+                }
+
+                val similarity = verifyAudioSuspending(currentIndex)
+                Log.d("VerificationsFragment", "Audio Index: $currentIndex, Similarity: $similarity")
+
+                val audioTxtFile = File(requireContext().filesDir, "confidence_scores/audio.txt")
+                audioTxtFile.parentFile?.mkdirs()
+                audioTxtFile.appendText("$similarity\n")
+                audioScores.add(similarity)
+
+                withContext(Dispatchers.Main) {
+                    setupChartAxesAndAppearance(binding.chartAudio, "Real-time Audio Confidence")
+                    plotChartData(binding.chartAudio, "Audio", audioScores, currentIndex)
+                }
+            }
+        }
+    }
+
+    private suspend fun verifyAudioSuspending(currentIndex: Int): Float {
+        val audioDir = File(requireContext().filesDir, "audio")
+        val segmentFiles = (currentIndex - 4..currentIndex).map { index ->
+            File(audioDir, "audio_${index}.wav")
+        }
+
+        // If any of the 5 files is missing, return 0 confidence
+        if (segmentFiles.any { !it.exists() }) {
+            Log.d("VerificationsFragment", "Insufficient audio files for verification at index: $currentIndex")
+            return 0f
+        }
+
+        return withContext(Dispatchers.IO) {
+            try {
+                // --- Step 1: Concatenate the 5 audio files into one 5s WAV file ---
+                val mergedFile = File(audioDir, "merged_audio_temp.wav")
+                mergeWavFiles(segmentFiles, mergedFile)
+
+                // --- Step 2: Run verification (placeholder function) ---
+                val similarity = audioRecognizer.verifyAudioFile(mergedFile)
+                similarity
+            } catch (e: Exception) {
+                Log.e("VerificationsFragment", "Error during audio verification: ${e.message}")
+                0f
+            }
+        }
+    }
+
+    private fun mergeWavFiles(inputFiles: List<File>, outputFile: File) {
+        val outputStream = FileOutputStream(outputFile)
+        val combinedAudioData = ByteArrayOutputStream()
+
+        // Skip the header (first 44 bytes) for all except the first file
+        inputFiles.forEachIndexed { index, file ->
+            val bytes = file.readBytes()
+            if (index == 0) {
+                combinedAudioData.write(bytes) // Keep header of first file
+            } else {
+                combinedAudioData.write(bytes.copyOfRange(44, bytes.size)) // Skip header
+            }
+        }
+
+        // Update WAV header for new combined length (optional but ideal)
+        val fullAudio = combinedAudioData.toByteArray()
+        updateWavHeader(fullAudio)
+
+        outputStream.write(fullAudio)
+        outputStream.close()
+    }
+
+    private fun updateWavHeader(wavData: ByteArray) {
+        val totalDataLen = wavData.size - 8
+        val totalAudioLen = wavData.size - 44
+        val sampleRate = 16000 // Adjust to your actual sample rate
+        val channels = 1       // Mono
+        val byteRate = 16 * sampleRate * channels / 8
+
+        fun writeIntLE(value: Int, offset: Int) {
+            wavData[offset] = (value and 0xff).toByte()
+            wavData[offset + 1] = ((value shr 8) and 0xff).toByte()
+            wavData[offset + 2] = ((value shr 16) and 0xff).toByte()
+            wavData[offset + 3] = ((value shr 24) and 0xff).toByte()
+        }
+
+        writeIntLE(totalDataLen, 4)
+        writeIntLE(totalAudioLen, 40)
+    }
+
+    // Gait Job
+
+    // Gait Job
+    private var gaitLoopJob: Job? = null
+    private var gaitProcessingJob: Job? = null
+    private val _newGaitDetectedChannel = Channel<Int>(Channel.CONFLATED)
+    private var previousGaitIndex = -1
+
+    private fun startGaitVerificationLoop() {
+        val gaitDir = File(requireContext().filesDir, "sensor")
+        if (!gaitDir.exists()) {
+            Log.w("VerificationsFragment", "Gait directory does not exist.")
+            return
+        }
+
+        startGaitProcessing()
+
+        gaitLoopJob = lifecycleScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                val current = gaitIndex // Replace with your logic to track gait index
+                if (current != previousGaitIndex) {
+                    previousGaitIndex = current
+                    _newGaitDetectedChannel.trySend(current).getOrThrow()
+                }
+                delay(100) // Check every 100ms for new gait data
+            }
+        }
+    }
+
+    private fun startGaitProcessing() {
+        gaitProcessingJob?.cancel()
+        gaitProcessingJob = lifecycleScope.launch(Dispatchers.IO) {
+            _newGaitDetectedChannel.receiveAsFlow().collect { currentIndex ->
+                val gaitFile = File(requireContext().filesDir, "sensor/sensor_${currentIndex}.txt")
+                if (!gaitFile.exists()) {
+                    Log.d("VerificationsFragment", "Gait file does not exist: sensor_${currentIndex}.txt")
+                    return@collect
+                }
+
+                val similarity = verifyGaitSuspending(currentIndex)
+                Log.d("VerificationsFragment", "Gait Index: $currentIndex, Similarity: $similarity")
+
+                val gaitTxtFile = File(requireContext().filesDir, "confidence_scores/gait.txt")
+                gaitTxtFile.parentFile?.mkdirs()
+                gaitTxtFile.appendText("$similarity\n")
+                gaitScores.add(similarity)
+
+                withContext(Dispatchers.Main) {
+                    setupChartAxesAndAppearance(binding.chartGait, "Real-time Gait Confidence")
+                    plotChartData(binding.chartGait, "Gait", gaitScores, currentIndex)
+                }
+            }
+        }
+    }
+
+    private suspend fun verifyGaitSuspending(currentIndex: Int): Float {
+        val gaitDir = File(requireContext().filesDir, "sensor")
+        val segmentFiles = (currentIndex - 4..currentIndex).map { index ->
+            File(gaitDir, "sensor_${index}.txt")
+        }
+
+        if (segmentFiles.any { !it.exists() }) {
+            Log.d("VerificationsFragment", "Insufficient gait files for verification at index: $currentIndex")
+            return 0f
+        }
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val mergedFile = File(gaitDir, "merged_gait_temp.txt")
+                mergeTxtFiles(segmentFiles, mergedFile)
+
+                val similarity = gaitRecognizer.verifyGaitFile(mergedFile)
+                similarity
+            } catch (e: Exception) {
+                Log.e("VerificationsFragment", "Error during gait verification: ${e.message}")
+                0f
+            }
+        }
+    }
+
+    private fun mergeTxtFiles(inputFiles: List<File>, outputFile: File) {
+        val mergedLines = mutableListOf<List<String>>()
+
+        for (file in inputFiles) {
+            val lines = file.readLines()
+
+            for (line in lines) {
+                val parts = line.split(",")
+                if (parts.size != 5) continue
+
+                val timestamp = parts[0]
+                val sensorType = parts[1]
+                val x = parts[2]
+                val y = parts[3]
+                val z = parts[4]
+
+                if (sensorType != "LSM6DSL Acceleration Sensor") continue
+                mergedLines.add(listOf(timestamp, x, y, z))
+            }
+        }
+
+        // Sort by timestamp (to make sure data is in order)
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss_SSS")
+        val baseTime = mergedLines.firstOrNull()?.get(0)?.let {
+            LocalDateTime.parse(it, formatter).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        } ?: return
+
+        outputFile.bufferedWriter().use { writer ->
+            writer.write("time,x,y,z\n")
+            for ((timestampStr, x, y, z) in mergedLines) {
+                val timeMillis = try {
+                    LocalDateTime.parse(timestampStr, formatter)
+                        .atZone(ZoneId.systemDefault())
+                        .toInstant()
+                        .toEpochMilli()
+                } catch (e: Exception) {
+                    continue
+                }
+                val elapsed = (timeMillis - baseTime) / 1000.0
+                writer.write("$elapsed,$x,$y,$z\n")
             }
         }
     }
@@ -311,68 +555,104 @@ class VerificationsFragment : Fragment() {
     // --- Renamed from setupConfidenceChartBasics to avoid ambiguity ---
     // This function sets up the basic axes and appearance of ANY LineChart.
     private fun setupChartAxesAndAppearance(chart: LineChart, chartTitle: String) {
-        chart.description.isEnabled = false
         chart.setTouchEnabled(true)
         chart.isDragEnabled = true
         chart.setScaleEnabled(true)
         chart.setPinchZoom(true)
         chart.setDrawGridBackground(false)
         chart.setBackgroundColor(Color.TRANSPARENT)
+        chart.setNoDataText("No data available")
 
+        // X-Axis
         val xAxis = chart.xAxis
         xAxis.position = XAxis.XAxisPosition.BOTTOM
         xAxis.setDrawGridLines(true)
         xAxis.setDrawAxisLine(true)
-        xAxis.setLabelCount(5, true)
+        xAxis.setAvoidFirstLastClipping(true)
         xAxis.textColor = Color.WHITE
+        xAxis.textSize = 12f
+        xAxis.granularity = 1f // Ensures ticks appear at every 1 unit
+        xAxis.isGranularityEnabled = true
+        xAxis.labelRotationAngle = 0f
+        xAxis.setLabelCount(6, false) // Let it auto adjust
+        xAxis.valueFormatter = object : ValueFormatter() {
+            override fun getFormattedValue(value: Float): String {
+                return "${value.toInt()}s"
+            }
+        }
 
+        // Y-Axis (Left)
         val leftAxis = chart.axisLeft
-        leftAxis.setDrawGridLines(true)
+        leftAxis.isEnabled = true // Must be true to show labels
         leftAxis.setDrawAxisLine(true)
+        leftAxis.setDrawGridLines(true)
         leftAxis.textColor = Color.WHITE
+        leftAxis.textSize = 12f
         leftAxis.axisMinimum = 0f
-        leftAxis.axisMaximum = 1f // Confidence scores are usually 0-1
+        leftAxis.axisMaximum = 1f
+        leftAxis.granularity = 0.1f
+        leftAxis.isGranularityEnabled = true
+        leftAxis.setLabelCount(6, true)
+        leftAxis.valueFormatter = object : ValueFormatter() {
+            override fun getFormattedValue(value: Float): String {
+                return String.format("%.1f", value)
+            }
+        }
 
-        chart.axisRight.isEnabled = false
+        // Y-Axis (Right) disabled
+        val rightAxis = chart.axisRight
+        rightAxis.isEnabled = true
+        rightAxis.setDrawAxisLine(false)
+        rightAxis.setDrawGridLines(false)
+
+        // Chart Legend
         chart.legend.textColor = Color.WHITE
-        chart.description.text = chartTitle // Use the passed title
+
+        // Chart Title
+        chart.description.isEnabled = true
+        chart.description.text = chartTitle
         chart.description.textColor = Color.WHITE
         chart.description.textSize = 12f
     }
 
     // --- NEW: Function to plot data on a given chart (for historical data) ---
-    private fun plotChartData(chart: LineChart, dataSetName: String, data: List<Float>) {
+    private fun plotChartData(chart: LineChart, dataSetName: String, data: List<Float>, currentIndex: Int = 0) {
         if (data.isEmpty()) {
             chart.data = null
             chart.invalidate()
             return
         }
 
-        val entries = data.mapIndexed { index, value ->
-            Entry(index.toFloat(), value)
+        // Use currentIndex to align x-axis properly with time
+        val entries = data.mapIndexed { i, value ->
+            Entry((currentIndex - data.size + i + 1).toFloat(), value)
+            // This ensures the latest data aligns with the currentIndex
         }
 
-        val dataSet = LineDataSet(entries, dataSetName)
-        dataSet.color = when (dataSetName) { // Customize colors based on data type
-            "Face" -> Color.BLUE
-            "Audio" -> Color.GREEN
-            "Gait" -> Color.RED
-            "Combined" -> Color.YELLOW
-            else -> Color.CYAN
+        val dataSet = LineDataSet(entries, dataSetName).apply {
+            color = when (dataSetName) {
+                "Face" -> Color.BLUE
+                "Audio" -> Color.GREEN
+                "Gait" -> Color.RED
+                "Combined" -> Color.YELLOW
+                else -> Color.CYAN
+            }
+            valueTextColor = Color.BLACK
+            setDrawValues(false)
+            setDrawCircles(false)
+            lineWidth = 2f
+            setDrawFilled(true)
+            fillColor = color
+            fillAlpha = 50
         }
-        dataSet.valueTextColor = Color.BLACK // Values on points
-        dataSet.setDrawValues(false) // Typically don't draw values on points for many data points
-        dataSet.setDrawCircles(false) // Don't draw individual circles
-        dataSet.lineWidth = 2f
 
-        dataSet.setDrawFilled(true)
-        dataSet.fillColor = dataSet.color // Use the dataset color for fill
-        dataSet.fillAlpha = 50 // Semi-transparent
+        val lineData = LineData(dataSet)
+        chart.data = lineData
 
-        chart.data = LineData(dataSet)
         chart.notifyDataSetChanged()
-        chart.invalidate() // Refresh chart
-        Log.d("VerificationsFragment", "Chart '${dataSetName}' updated with ${entries.size} entries.")
+        chart.invalidate()
+
+        Log.d("VerificationsFragment", "Chart '$dataSetName' updated at index $currentIndex with ${entries.size} entries.")
     }
 
     // This loadConfidenceData now assumes files like "face.txt", "audio.txt", "gait.txt"
