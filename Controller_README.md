@@ -113,7 +113,7 @@ Start Recording
 
 ```kotlin
 private fun sendStartRecordingCommand() {
-    serviceMessenger?.let { messenger ->
+    serviceMessenger?.let { messenger : Messenger ->
         val message = Message.obtain(null, MSG_START_RECORDING).apply {
             replyTo = clientMessenger
         }
@@ -127,7 +127,7 @@ Request Verification Scores
 
 ```kotlin
 private fun requestVerificationScores() {
-    serviceMessenger?.let { messenger ->
+    serviceMessenger?.let { messenger : Messenger ->
         val message = Message.obtain(null, MSG_GET_VERIFICATION_SCORES).apply {
             replyTo = clientMessenger
         }
@@ -140,7 +140,7 @@ private fun requestVerificationScores() {
 ### **4. Handling Responses**
 The **clientMessenger** is responsible for receiving responses from the Service Application:
 ```kotlin
-private val clientMessenger = Messenger(Handler(Looper.getMainLooper()) { message ->
+private val clientMessenger = Messenger(Handler(Looper.getMainLooper()) { message : Messenger ->
     handleIncomingMessage(message)
 })
 ```
@@ -150,6 +150,7 @@ private val clientMessenger = Messenger(Handler(Looper.getMainLooper()) { messag
 private fun handleSensorResponse() {
     showLoadingState()
     Handler(Looper.getMainLooper()).postDelayed({
+        @Suppress("VARIABLE_EXPECTED")
         binding.tvCheckInstruction.text = "Sensors are turned on"
         hideLoadingState()
     }, LOADING_DELAY_MS)
