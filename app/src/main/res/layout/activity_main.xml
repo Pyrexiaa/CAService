@@ -31,35 +31,114 @@
         app:layout_constraintTop_toTopOf="parent"
         app:navGraph="@navigation/mobile_navigation" />
 
-    <Button
-        android:id="@+id/btnRequestGait"
-        android:layout_width="wrap_content"
+    <TextView
+        android:id="@+id/controllerAppTitle"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/check_sensor_status"
-        app:layout_constraintBottom_toTopOf="@+id/nav_view"
+        android:fontFamily="sans-serif-condensed-medium"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="12dp"
+        android:gravity="center_horizontal"
+        android:text="Controller Application"
+        android:textColor="#333333"
+        android:textSize="28sp"
+        android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.455" />
+        android:layout_marginTop="0dp"/>
 
+    <!-- Current Combined Confidence Score Title -->
     <TextView
-        android:id="@+id/sensorStatus"
+        android:id="@+id/tvScoreTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/sensor_status"
-        app:layout_constraintBottom_toTopOf="@+id/btnRequestGait"
+        android:fontFamily="sans-serif-thin"
+        android:layout_marginTop="32dp"
+        android:text="Current Combined Confidence Score"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="@android:color/black"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toBottomOf="@+id/controllerAppTitle" />
 
+    <!-- Dynamic Score Value -->
     <TextView
-        android:id="@+id/sensorScore"
+        android:id="@+id/tvScoreValue"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/sensor_score"
+        android:layout_marginTop="60dp"
+        android:layout_marginEnd="0dp"
+        android:fontFamily="sans-serif-medium"
+        android:text="0"
+        android:textColor="@color/black"
+        android:textSize="60sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toStartOf="@+id/tvScoreValueDenominator"
+        app:layout_constraintHorizontal_chainStyle="packed"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/tvScoreTitle"
+        app:layout_constraintBaseline_toBaselineOf="@+id/tvScoreValueDenominator" />
+
+    <TextView
+        android:id="@+id/tvScoreValueDenominator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="60dp"
+        android:layout_marginStart="0dp"
+        android:fontFamily="sans-serif-medium"
+        android:text="/100"
+        android:textColor="@color/black"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/tvScoreValue"
+        app:layout_constraintTop_toBottomOf="@+id/tvScoreTitle" />
+
+    <!-- Loading Progress Bar -->
+    <ProgressBar
+        android:id="@+id/progressBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:indeterminateTint="@color/black"
+        app:layout_constraintBottom_toBottomOf="@+id/fabCheckSensor"
+        app:layout_constraintEnd_toEndOf="@+id/fabCheckSensor"
+        app:layout_constraintStart_toStartOf="@+id/fabCheckSensor"
+        app:layout_constraintTop_toTopOf="@+id/fabCheckSensor" />
+
+    <!-- Instruction Text -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabCheckSensor"
+        android:layout_width="200dp"
+        android:layout_height="200dp"
+        android:contentDescription="Check sensor status"
+        android:scaleType="center"
+        android:src="@drawable/button_icon_24dp"
+        app:backgroundTint="#7B1FA2"
+        app:fabCustomSize="200dp"
+        app:layout_constraintBottom_toTopOf="@+id/tvCheckInstruction"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.497"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/tvScoreValue"
+        app:maxImageSize="120dp"
+        app:tint="@android:color/white"/>
+
+    <TextView
+        android:id="@+id/tvCheckInstruction"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-medium"
+        android:layout_marginTop="0dp"
+        android:text="Tap to check sensor status"
+        android:textSize="14sp"
+        android:textColor="@android:color/darker_gray"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/fabCheckSensor"
         app:layout_constraintBottom_toTopOf="@+id/nav_view"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/btnRequestGait" />
+        android:layout_marginBottom="32dp" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

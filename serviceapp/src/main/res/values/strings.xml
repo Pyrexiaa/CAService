@@ -4,4 +4,8 @@
     <string name="title_dashboard">Dashboard</string>
     <string name="title_notifications">Notifications</string>
     <string name="title_verifications">Verifications</string>
+    <string name="LongerRecordings">Recording a longer sample will improve accuracy.</string>
+    <string name="profile">Profile</string>
+    <string name="scoreboard">ScoreBoard</string>
+    <string name="livefeed">LiveFeed</string>
 </resources>

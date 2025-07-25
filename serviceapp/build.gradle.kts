@@ -58,6 +58,7 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    implementation (libs.androidx.gridlayout)
     // CameraX - custom control over camera
     implementation (libs.androidx.camera.core)
     implementation (libs.androidx.camera.camera2.v130)
@@ -73,6 +74,8 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
+    // audio detection
+    implementation(libs.webrtc)
     // audio processing
     implementation (libs.core)
     implementation (libs.jvm)

@@ -33,7 +33,7 @@ class AudioRecognizer(private val context: Context, modelPath: String, mfccPath:
     private val prefs: SharedPreferences = context.getSharedPreferences("AudioPrefs", Context.MODE_PRIVATE)
     private var enrolledEmbedding: FloatArray? = null
 
-    private val modelFileName = "mfcc_model.tflite"
+    private val modelFileName = mfccPath
     private val mfccExtractor: MfccFeatureExtractor = MfccFeatureExtractor(context, modelFileName)
 
     fun saveFeaturesToCsv(context: Context, fileName: String, features: FloatArray) {
@@ -144,11 +144,11 @@ class AudioRecognizer(private val context: Context, modelPath: String, mfccPath:
 
         saveMfcc2DToCsv(context, "mfcc_raw_frames.csv", mfcc2D)
 
-        println("--- mfcc2D Content ---")
-        mfcc2D.forEachIndexed { frameIndex, frame ->
-            println("Frame $frameIndex: ${frame.joinToString(", ")}")
-        }
-        println("----------------------")
+//        println("--- mfcc2D Content ---")
+//        mfcc2D.forEachIndexed { frameIndex, frame ->
+//            println("Frame $frameIndex: ${frame.joinToString(", ")}")
+//        }
+//        println("----------------------")
 
         val means = FloatArray(numCoeffs)
         val stds = FloatArray(numCoeffs)
@@ -186,7 +186,7 @@ class AudioRecognizer(private val context: Context, modelPath: String, mfccPath:
                 kurtoses[j] = 0f
             }
 
-            println("Coeff $j - Mean: ${means[j]}, Std: ${stds[j]}, Skew: ${skews[j]}, Kurtosis: ${kurtoses[j]}")
+//            println("Coeff $j - Mean: ${means[j]}, Std: ${stds[j]}, Skew: ${skews[j]}, Kurtosis: ${kurtoses[j]}")
         }
 
         // Concatenate all stats: mean + std + skew + kurtosis (each of length numCoeffs)
@@ -231,77 +231,6 @@ class AudioRecognizer(private val context: Context, modelPath: String, mfccPath:
             Log.d("Load Embedding", "Error occurred: $e")
             return null
         }
-    }
-
-    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    fun recordForEnrollment(context: Context, onSuccess: (FloatArray?) -> Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(context, "Microphone permission not granted", Toast.LENGTH_SHORT).show()
-            onSuccess(null)
-            return
-        }
-
-        val fileName = "enrollment_temp.wav"
-        val filePath = File(context.cacheDir, fileName).absolutePath
-
-        Toast.makeText(context, "Recording audio for enrollment...", Toast.LENGTH_SHORT).show()
-
-        val sampleRate = 26521
-        val channelConfig = AudioFormat.CHANNEL_IN_MONO
-        val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-        val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-
-        val audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            sampleRate, channelConfig, audioFormat, bufferSize
-        )
-
-        // Check if AudioRecord is properly initialized
-        if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
-            Toast.makeText(context, "AudioRecord not initialized", Toast.LENGTH_SHORT).show()
-            onSuccess(null)
-            return
-        }
-
-        val durationSeconds = 5
-        val totalBytesToRecord = sampleRate * durationSeconds * 2 // 2 bytes per sample for 16-bit mono PCM
-        val audioData = ByteArray(totalBytesToRecord)
-
-        Thread {
-            try {
-                audioRecord.startRecording()
-
-                var bytesRead = 0
-                while (bytesRead < totalBytesToRecord) {
-                    val bytesToRead = minOf(bufferSize, totalBytesToRecord - bytesRead)
-                    val result = audioRecord.read(audioData, bytesRead, bytesToRead)
-                    if (result < 0) break
-                    bytesRead += result
-                }
-
-                audioRecord.stop()
-                audioRecord.release()
-
-                // Save raw PCM as WAV file
-                writeWavFile(filePath, audioData, sampleRate, 1, 16)
-                Log.e("recordForEnrollment", "Recording saved to $filePath")
-
-                // Extract embedding
-                val embedding = enrollEmbedding(filePath)
-
-                Handler(Looper.getMainLooper()).post {
-                    Toast.makeText(context, "Audio enrolled", Toast.LENGTH_SHORT).show()
-                    onSuccess(embedding)
-                }
-            } catch (e: Exception) {
-                Log.e("recordForEnrollment", "Recording failed", e)
-                audioRecord.release()
-                Handler(Looper.getMainLooper()).post {
-                    Toast.makeText(context, "Recording failed: ${e.message ?: "Unknown error"}", Toast.LENGTH_SHORT).show()
-                    onSuccess(null)
-                }
-            }
-        }.start()
     }
 
     private var audioRecord: AudioRecord? = null

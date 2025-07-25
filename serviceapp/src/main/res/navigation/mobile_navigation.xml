@@ -3,23 +3,24 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/mobile_navigation"
-    app:startDestination="@+id/navigation_home">
-
-    <fragment
-        android:id="@+id/navigation_home"
-        android:name="com.example.serviceapp.ui.home.HomeFragment"
-        android:label="@string/title_home"
-        tools:layout="@layout/fragment_home" />
-
-    <fragment
-        android:id="@+id/navigation_dashboard"
-        android:name="com.example.serviceapp.ui.dashboard.DashboardFragment"
-        android:label="@string/title_dashboard"
-        tools:layout="@layout/fragment_dashboard" />
+    app:startDestination="@+id/navigation_verifications">
 
     <fragment
         android:id="@+id/navigation_verifications"
         android:name="com.example.serviceapp.ui.verifications.VerificationsFragment"
-        android:label="@string/title_notifications"
+        android:label="@string/scoreboard"
         tools:layout="@layout/fragment_verifications" />
+
+    <fragment
+        android:id="@+id/navigation_dashboard"
+        android:name="com.example.serviceapp.ui.dashboard.DashboardFragment"
+        android:label="@string/livefeed"
+        tools:layout="@layout/fragment_dashboard" />
+
+    <fragment
+        android:id="@+id/navigation_home"
+        android:name="com.example.serviceapp.ui.home.HomeFragment"
+        android:label="@string/profile"
+        tools:layout="@layout/fragment_home" />
+
 </navigation>

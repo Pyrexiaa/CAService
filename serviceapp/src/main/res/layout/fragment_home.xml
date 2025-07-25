@@ -1,156 +1,292 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="#F2F4F8"
     android:padding="16dp"
-    tools:context=".ui.home.HomeFragment"
-    android:background="#FAFAFA">
+    tools:context=".ui.home.HomeFragment">
+
+    <TextView
+        android:id="@+id/profileTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-condensed-medium"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="12dp"
+        android:text="Profile"
+        android:textColor="#333333"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/profileDescription"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:paddingHorizontal="10dp"
+        android:text="This section allows you to enroll and manage your biometric data for enhanced security and personalized experiences. You can register your face, voice, and gait for seamless authentication."
+        android:textColor="#555555"
+        android:textSize="12sp"
+        app:layout_constraintTop_toBottomOf="@+id/profileTitle"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <ScrollView
         android:id="@+id/scrollView"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:fillViewport="true"
-        app:layout_constraintTop_toTopOf="parent"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="40dp"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintTop_toBottomOf="@+id/profileDescription"
+        android:fillViewport="true">
 
-        <LinearLayout
+        <androidx.gridlayout.widget.GridLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="8dp"
-            android:background="@android:color/white"
-            android:elevation="4dp"
-            android:layout_margin="8dp"
-            android:clipToPadding="false">
+            android:paddingBottom="16dp"
+            app:columnCount="2"
+            app:rowCount="2">
 
-            <!-- Face Section -->
-            <TextView
-                android:layout_width="wrap_content"
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="Face Recognition"
-                android:textStyle="bold"
-                android:textSize="18sp"
-                android:layout_marginTop="16dp"/>
+                app:layout_columnWeight="1"
+                app:layout_rowWeight="1"
+                app:layout_column="0"
+                app:layout_row="0"
+                android:layout_margin="8dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnFaceEnroll"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Enroll Face"
-                android:layout_marginTop="8dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnFaceVerify"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Verify Face"
-                android:layout_marginTop="8dp" />
-
-            <!-- Voice Section -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Voice Recognition"
-                android:textStyle="bold"
-                android:textSize="18sp"
-                android:layout_marginTop="24dp"/>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_horizontal"
-                android:layout_marginTop="8dp">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnStartRecording"
-                    style="@style/Widget.MaterialComponents.Button"
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Start Enroll"
-                    android:textSize="10sp"/>
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
-                <Space
-                    android:layout_width="8dp"
-                    android:layout_height="wrap_content"/>
+                    <ImageView
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:src="@drawable/face_recognition_icon_24dp"
+                    android:contentDescription="Face Recognition Icon"
+                    android:layout_marginBottom="8dp"/>
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnStopRecording"
-                    style="@style/Widget.MaterialComponents.Button"
-                    android:layout_width="0dp"
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="Face Recognition"
+                        android:textColor="@color/black"
+                        android:textSize="16sp"
+                        android:gravity="center"/>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnFaceEnroll"
+                        style="@style/Widget.MaterialComponents.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Enroll"
+                        android:textSize="14sp"
+                        android:textColor="@color/white"
+                        app:cornerRadius="10dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnFaceVerify"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Verify"
+                        android:textSize="14sp"
+                        android:textColor="@color/design_default_color_primary"
+                        app:cornerRadius="10dp"
+                        app:strokeColor="@color/design_default_color_primary" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                app:layout_columnWeight="1"
+                app:layout_rowWeight="1"
+                app:layout_column="1"
+                app:layout_row="0"
+                android:layout_margin="8dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Stop Enroll"
-                    android:textSize="10sp"/>
-            </LinearLayout>
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnAudioVerify"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="match_parent"
+                    <ImageView
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:src="@drawable/audio_recognition_icon_24dp"
+                    android:contentDescription="Voice Recognition Icon"
+                    android:layout_marginBottom="8dp"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="Voice Recognition"
+                        android:textColor="@color/black"
+                        android:textSize="16sp"
+                        android:gravity="center"/>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnStartRecording"
+                        style="@style/Widget.MaterialComponents.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Enroll"
+                        android:textSize="14sp"
+                        android:textColor="@color/white"
+                        app:cornerRadius="10dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnAudioVerify"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Verify"
+                        android:textSize="14sp"
+                        android:textColor="@color/design_default_color_primary"
+                        app:cornerRadius="10dp"
+                        app:strokeColor="@color/design_default_color_primary" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="Verify Voice"
-                android:layout_marginTop="8dp" />
+                app:layout_columnWeight="1"
+                app:layout_rowWeight="1"
+                app:layout_column="0"
+                app:layout_row="1"
+                android:layout_margin="8dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
 
-            <!-- Gait Section -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Gait Recognition"
-                android:textStyle="bold"
-                android:textSize="18sp"
-                android:layout_marginTop="24dp"/>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_horizontal"
-                android:layout_marginTop="8dp">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnGaitStart"
-                    style="@style/Widget.MaterialComponents.Button"
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Start Enroll"
-                    android:textSize="10sp"/>
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
-                <Space
-                    android:layout_width="8dp"
-                    android:layout_height="wrap_content"/>
+                    <ImageView
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:src="@drawable/gait_recognition_icon_24dp"
+                        android:contentDescription="Gait Recognition Icon"
+                        android:layout_marginBottom="8dp"/>
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnGaitStop"
-                    style="@style/Widget.MaterialComponents.Button"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Stop Enroll"
-                    android:textSize="10sp"/>
-            </LinearLayout>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="Gait Recognition"
+                        android:textColor="@color/black"
+                        android:textSize="16sp"
+                        android:gravity="center"/>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnGaitVerify"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="match_parent"
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnGaitStart"
+                        style="@style/Widget.MaterialComponents.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Enroll"
+                        android:textSize="14sp"
+                        android:textColor="@color/white"
+                        app:cornerRadius="10dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnGaitVerify"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Verify"
+                        android:textSize="14sp"
+                        android:textColor="@color/design_default_color_primary"
+                        app:cornerRadius="10dp"
+                        app:strokeColor="@color/design_default_color_primary" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="Verify Gait"
-                android:layout_marginTop="8dp"
-                android:layout_marginBottom="24dp"/>
+                app:layout_columnWeight="1"
+                app:layout_rowWeight="1"
+                app:layout_column="1"
+                app:layout_row="1"
+                android:layout_margin="8dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp">
 
-        </LinearLayout>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <ImageView
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:src="@drawable/question_icon_24dp"
+                        android:contentDescription="Add Biometric Icon"
+                        android:layout_marginBottom="8dp"
+                        app:tint="#CCCCCC"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="More Biometrics Coming Soon!"
+                        android:textColor="#999999"
+                        android:textSize="16sp"
+                        android:gravity="center"
+                        android:layout_marginBottom="8dp"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif"
+                        android:gravity="center"
+                        android:text="Expand your security options with future biometric integrations."
+                        android:textColor="#AAAAAA"
+                        android:textSize="12sp" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </androidx.gridlayout.widget.GridLayout>
     </ScrollView>
 
     <FrameLayout
@@ -158,35 +294,37 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <!-- Instruction Layout -->
         <LinearLayout
             android:id="@+id/faceDirectionGuide"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="vertical"
+            android:background="#CC000000"
             android:gravity="center"
-            android:background="#88000000"
+            android:orientation="vertical"
             android:padding="16dp"
-            android:visibility="gone"> <!-- Start hidden -->
+            android:visibility="gone">
 
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:alpha="0.9"
+                android:alpha="0.95"
                 android:background="@android:color/white"
                 android:elevation="8dp"
                 android:gravity="center"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:padding="16dp"
+                app:cardCornerRadius="12dp">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:paddingBottom="8dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:paddingBottom="12dp"
                     android:text="Face Enrollment Instructions"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
+                    android:gravity="center"
+                    android:textColor="@color/black"
+                    android:textSize="16sp" />
 
                 <LinearLayout
                     android:layout_width="wrap_content"
@@ -196,36 +334,41 @@
 
                     <ImageView
                         android:id="@+id/imgFaceCenter"
-                        android:layout_width="64dp"
-                        android:layout_height="64dp"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:layout_marginHorizontal="4dp"
                         android:contentDescription="Center"
                         android:src="@drawable/face_center" />
 
                     <ImageView
                         android:id="@+id/imgFaceLeft"
-                        android:layout_width="64dp"
-                        android:layout_height="64dp"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:layout_marginHorizontal="4dp"
                         android:contentDescription="Left"
                         android:src="@drawable/face_left" />
 
                     <ImageView
                         android:id="@+id/imgFaceRight"
-                        android:layout_width="64dp"
-                        android:layout_height="64dp"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:layout_marginHorizontal="4dp"
                         android:contentDescription="Right"
                         android:src="@drawable/face_right" />
 
                     <ImageView
                         android:id="@+id/imgFaceUp"
-                        android:layout_width="64dp"
-                        android:layout_height="64dp"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:layout_marginHorizontal="4dp"
                         android:contentDescription="Up"
                         android:src="@drawable/face_up" />
 
                     <ImageView
                         android:id="@+id/imgFaceDown"
-                        android:layout_width="64dp"
-                        android:layout_height="64dp"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:layout_marginHorizontal="4dp"
                         android:contentDescription="Down"
                         android:src="@drawable/face_down" />
                 </LinearLayout>
@@ -233,44 +376,83 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:paddingVertical="8dp"
+                    android:fontFamily="sans-serif"
                     android:gravity="center"
-                    android:text="We will be taking photos from 5 directions"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
+                    android:paddingVertical="12dp"
+                    android:text="We will be taking photos from 5 directions to ensure accurate enrollment."
+                    android:textColor="#555555"
+                    android:textSize="12sp" />
 
                 <Button
                     android:id="@+id/btnStartCapture"
+                    style="@style/Widget.MaterialComponents.Button"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="Understood" />
+                    android:layout_marginTop="10dp"
+                    android:text="Understood"
+                    android:textColor="@color/white"
+                    app:cornerRadius="8dp" />
             </LinearLayout>
+
         </LinearLayout>
 
-
-        <!-- Camera Preview and Capture Button -->
-        <androidx.camera.view.PreviewView
-            android:id="@+id/previewView"
+        <LinearLayout
+            android:id="@+id/previewViewContainer"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="gone" />
+            android:orientation="vertical"
+            android:layout_gravity="top|center_horizontal"
+            android:padding="16dp"
+            android:background="#CC000000"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/white"
+                android:padding="12dp"
+                android:layout_gravity="center">
+
+                <TextView
+                    android:id="@+id/tvCurrentDirection"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Current Orientation: Center"
+                    android:textSize="18sp"
+                    android:textColor="@color/black"
+                    android:fontFamily="sans-serif"
+                    android:gravity="center"
+                    android:paddingBottom="8dp"/>
+
+            </LinearLayout>
+
+            <androidx.camera.view.PreviewView
+                android:id="@+id/previewView"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"/>
+        </LinearLayout>
 
         <Button
             android:id="@+id/btnCapture"
+            style="@style/Widget.MaterialComponents.Button.Icon"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Capture"
             android:layout_gravity="bottom|center_horizontal"
             android:layout_marginBottom="32dp"
-            android:visibility="gone" />
+            android:text="Capture"
+            android:visibility="gone"
+            app:cornerRadius="24dp"
+            app:icon="@android:drawable/ic_menu_camera"
+            app:iconGravity="textStart"
+            app:iconPadding="8dp" />
     </FrameLayout>
 
     <FrameLayout
         android:id="@+id/loadingOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#80000000"
+        android:background="#B0000000"
         android:gravity="center"
         android:visibility="gone">
 
@@ -278,7 +460,136 @@
             android:id="@+id/progressBar"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center" />
+            android:layout_gravity="center"
+            android:indeterminateTint="@color/white" />
     </FrameLayout>
 
-    </androidx.constraintlayout.widget.ConstraintLayout>
+    <FrameLayout
+        android:id="@+id/audioRecordingStatusLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#B0000000"
+        android:gravity="center"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <ProgressBar
+                android:id="@+id/progressRecording"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="250dp"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:indeterminate="false"
+                android:max="5000"
+                android:progress="0"
+                android:progressTint="@color/design_default_color_primary" />
+
+            <TextView
+                android:id="@+id/tvRecordingTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:text="Recording: 0.0s"
+                android:textColor="@android:color/white"
+                android:textSize="18sp" />
+
+            <TextView
+                android:id="@+id/tvRecordingTip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:fontFamily="sans-serif"
+                android:gravity="center"
+                android:text="@string/LongerRecordings"
+                android:textColor="#C8E6C9"
+                android:textSize="14sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnStopRecording"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Stop Enroll"
+                android:textColor="@color/white"
+                app:cornerRadius="8dp"
+                app:strokeColor="@color/white" />
+
+        </LinearLayout>
+
+    </FrameLayout>
+
+    <FrameLayout
+        android:id="@+id/gaitRecordingStatusLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#B0000000"
+        android:gravity="center"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <ProgressBar
+                android:id="@+id/gaitProgressRecording"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="250dp"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:indeterminate="false"
+                android:max="5000"
+                android:progress="0"
+                android:progressTint="@color/design_default_color_primary" />
+
+            <TextView
+                android:id="@+id/gaitTvRecordingTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:text="Recording: 0.0s"
+                android:textColor="@android:color/white"
+                android:textSize="18sp" />
+
+            <TextView
+                android:id="@+id/gaitTvRecordingTip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:fontFamily="sans-serif"
+                android:gravity="center"
+                android:text="@string/LongerRecordings"
+                android:textColor="#C8E6C9"
+                android:textSize="14sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnGaitStop"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Stop Enroll"
+                android:textColor="@color/white"
+                app:cornerRadius="8dp"
+                app:strokeColor="@color/white" />
+
+        </LinearLayout>
+
+    </FrameLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -12,15 +12,13 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
-import android.widget.TextView
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.example.serviceapp.R
 import com.example.serviceapp.databinding.FragmentDashboardBinding
-import com.example.serviceapp.main_utils.AudioProcessor
-import com.example.serviceapp.main_utils.ImageProcessor
-import com.example.serviceapp.main_utils.SensorProcessor
+import com.example.serviceapp.service.processors.AudioProcessor
+import com.example.serviceapp.service.processors.ImageProcessor
+import com.example.serviceapp.service.processors.SensorProcessor
 
 class DashboardFragment : Fragment() {
 

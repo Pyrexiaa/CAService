@@ -11,15 +11,15 @@ import java.nio.channels.FileChannel
 
 class TFLiteModelRunner(context: Context, modelPath: String, private val outputSize: Int, numThreads: Int = 4) {
 
-    private var tflite: Interpreter? = null
+    private var tfLite: Interpreter? = null
 
     init {
-        val tfliteModel = loadModelFile(context, modelPath)
+        val tfLiteModel = loadModelFile(context, modelPath)
         val options = Interpreter.Options().apply {
             this.numThreads = numThreads
             // Optional: add GPU delegate here if needed
         }
-        tflite = Interpreter(tfliteModel, options)
+        tfLite = Interpreter(tfLiteModel, options)
     }
 
     @Throws(IOException::class)
@@ -33,12 +33,12 @@ class TFLiteModelRunner(context: Context, modelPath: String, private val outputS
 
     fun run(input: ByteBuffer): FloatArray {
         val outputArray = Array(1) { FloatArray(outputSize) }
-        tflite?.run(input, outputArray)
+        tfLite?.run(input, outputArray)
         return outputArray[0]
     }
 
     fun close() {
-        tflite?.close()
-        tflite = null
+        tfLite?.close()
+        tfLite = null
     }
 }
