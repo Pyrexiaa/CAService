@@ -4,6 +4,8 @@ This repository contains two Android applications developed in Kotlin using Andr
 - Service Application – Handles profile enrollment, data collection, feature extraction, and continuous authentication (face, audio, gait).
 - Controller Application – Sends signals to the service application to initiate real-time data collection and monitoring.
 
+Please refer to Controller_README.md to know more about controller application.
+Please refer to Service_README.md to know more about service application.
 
 ---
 ## Installation
